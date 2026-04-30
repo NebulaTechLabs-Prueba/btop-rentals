@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+.env.local
+.vite
+
+# Local-only backend (not used in static demo)
+server/
