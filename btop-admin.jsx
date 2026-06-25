@@ -118,10 +118,14 @@ const ADM_NAV=[
   {id:"spaces",label:"Storage Spaces",icon:Warehouse,group:"Rentals"},
   {id:"bookings",label:"Bookings",icon:Calendar,group:"Rentals"},
   {id:"contacts",label:"Contacts",icon:Contact,group:"Operations"},
+  {id:"carts",label:"Carritos (en vivo)",icon:Package,group:"Operations"},
   {id:"messages",label:"Messages",icon:Mail,group:"Operations"},
   {id:"posts",label:"Posts",icon:FileText,group:"Operations"},
+  {id:"orderspay",label:"Pedidos & Pagos",icon:CreditCard,group:"Billing"},
   {id:"reservations",label:"Reservations",icon:Calendar,group:"Billing"},
   {id:"settlement",label:"Final Settlement",icon:DollarSign,group:"Billing"},
+  {id:"credit",label:"Créditos & Mora",icon:DollarSign,group:"Billing"},
+  {id:"contracts",label:"Contratos",icon:FileText,group:"Billing"},
   {id:"pay",label:"Payments",icon:CreditCard,group:"Billing"},
   {id:"invoices",label:"Invoices",icon:FileText,group:"Billing"},
   {id:"users",label:"Users & Roles",icon:UserCog,group:"Operations"},
@@ -2653,6 +2657,380 @@ function Cal({sd,ed,setSd,setEd,sel,setSel,blocked=[]}){
   </div>;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   ORDERS · PAYMENTS · LIVE CARTS · BILLING/CREDIT · AUTO CONTRACTS  (added)
+   Demo layer: state is persisted to localStorage so the admin sees live
+   carts/orders across reloads. Swap usePersistentState for the REST API
+   (see vite proxy /api) when the backend host is connected.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* localStorage-backed React state. Falls back to in-memory on private mode. */
+function usePersistentState(key,initial){
+  const [v,setV]=useState(()=>{
+    try{const s=window.localStorage.getItem(key);if(s!=null)return JSON.parse(s);}catch(e){}
+    return typeof initial==="function"?initial():initial;
+  });
+  useEffect(()=>{try{window.localStorage.setItem(key,JSON.stringify(v))}catch(e){}},[key,v]);
+  return [v,setV];
+}
+
+const PENDING_TTL_DAYS=30;          /* pending orders auto-expire after 30 days */
+const CART_STALE_MIN=60;            /* an active cart untouched >60 min = abandoned */
+const SUPPORT={phone:"+1 469 690 712",altPhone:"(469) 690-7112",email:"btoprentals@gmail.com"};
+
+const genCode=(prefix)=>prefix+"-"+Math.random().toString(36).slice(2,8).toUpperCase();
+const nowISO=()=>new Date().toISOString();
+const daysLeft=(iso)=>iso?Math.ceil((new Date(iso).getTime()-Date.now())/86400000):null;
+const fmtDateTime=(iso)=>{try{return new Date(iso).toLocaleString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}catch(e){return iso||""}};
+
+/* ─── RENTAL CONTRACT — dynamic template (variables + {{items}} block) ─── */
+const DEFAULT_CONTRACT_TPL={
+  title:"CONTRATO DE RENTA DE EQUIPO — BTOP RENTALS",
+  body:`Contrato N.º: {{contract_number}}      Pedido N.º: {{order_number}}
+Fecha de emisión: {{issue_date}}
+
+ENTRE:
+  EL ARRENDADOR: BTOP Rentals ("LA EMPRESA") — 9807 Mines Rd #9, Laredo TX 78045.
+  EL ARRENDATARIO: {{client_name}}  ·  {{client_email}}  ·  {{client_phone}}
+
+1. OBJETO
+   La Empresa entrega en arrendamiento al Arrendatario el/los equipo(s) descritos
+   en la cláusula 2, por el periodo del {{rental_start}} al {{rental_end}}.
+
+2. EQUIPO ARRENDADO (vinculado al pedido {{order_number}})
+{{items}}
+   ------------------------------------------------------------------------
+   Subtotal renta: {{subtotal}}    Depósitos: {{deposit_total}}    TOTAL: {{total}}
+
+3. FORMA DE PAGO
+   Método: {{payment_method}}      Estado: PAGO APROBADO el {{approved_date}}
+
+4. DEPÓSITO EN GARANTÍA
+   El Arrendatario entrega {{deposit_total}} en depósito, reembolsable a la
+   devolución del equipo en las condiciones pactadas.
+
+5. CONDICIONES GENERALES
+   El equipo se entrega en buen estado de funcionamiento. El Arrendatario es
+   responsable de daños, multas y combustible durante el periodo de renta. La
+   devolución tardía genera cargos adicionales conforme a la tarifa vigente.
+
+6. FIRMAS
+   ____________________            ____________________
+   LA EMPRESA                      {{client_name}}
+   Fecha: {{issue_date}}           Fecha: ________________`,
+  footer:"BTOP Rentals · 9807 Mines Rd #9, Laredo TX 78045 · "+SUPPORT.altPhone+" · "+SUPPORT.email,
+};
+
+/* Normalize an order to a list of line items (the contract MUST list products) */
+function orderLineItems(order){
+  if(Array.isArray(order.items)&&order.items.length)return order.items;
+  return [{name:order.un2||order.un||"Equipo",cat:order.ut||"",days:order.days||0,qty:order.qty||1,rate:order.tp||0,deposit:order.reservationPaid||order.dp||0}];
+}
+
+/* Resolve {{variables}} + {{items}} into a printable rental contract */
+function renderContract(tpl,order){
+  const items=orderLineItems(order);
+  const itemsBlock=items.map(it=>`   • ${it.name}${it.cat?" ("+it.cat+")":""}
+     ${it.days?it.days+" días · ":""}Cantidad: ${it.qty||1} · Renta: $${Number(it.rate||0).toFixed(2)} · Depósito: $${Number(it.deposit||0).toFixed(2)}`).join("\n");
+  const subtotal=items.reduce((s,i)=>s+Number(i.rate||0),0);
+  const depTotal=items.reduce((s,i)=>s+Number(i.deposit||0),0);
+  const vars={
+    contract_number:order.contractNum||genCode("CTR"),
+    order_number:order.oid||"",
+    issue_date:new Date().toLocaleDateString("es-MX"),
+    approved_date:order.approvedAt?new Date(order.approvedAt).toLocaleDateString("es-MX"):new Date().toLocaleDateString("es-MX"),
+    client_name:order.un||"Cliente",
+    client_email:order.ue||"",
+    client_phone:order.bPhone||order.phone||order.cashPhone||"",
+    rental_start:dateToStr(order.sd)||"—",
+    rental_end:dateToStr(order.ed)||"—",
+    subtotal:"$"+subtotal.toFixed(2),
+    deposit_total:"$"+depTotal.toFixed(2),
+    total:"$"+(subtotal+depTotal).toFixed(2),
+    payment_method:order.payMethod||"—",
+    items:itemsBlock,
+  };
+  const fill=s=>String(s||"").replace(/\{\{(\w+)\}\}/g,(_,k)=>vars[k]??`{{${k}}}`);
+  return{title:tpl.title,body:fill(tpl.body),footer:fill(tpl.footer),vars,contractNum:vars.contract_number};
+}
+
+/* Open a printable contract window (demo stand-in for the emailed PDF attachment) */
+function printContract(c){
+  const html=`<html><head><title>${c.contractNum||c.oid}</title><style>body{font-family:Arial,Helvetica,sans-serif;max-width:800px;margin:0 auto;padding:48px;color:#1c1917}h1{font-size:18px;color:#1e3a5f;border-bottom:2px solid #1e3a5f;padding-bottom:10px}pre{white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.7}.ft{margin-top:32px;border-top:1px solid #e7e5e4;padding-top:12px;font-size:11px;color:#78716c;text-align:center}</style></head><body><h1>${c.title}</h1><pre>${c.body}</pre><div class="ft">${c.footer}</div></body></html>`;
+  const w=window.open("","_blank","width=820,height=1000");if(w){w.document.write(html);w.document.close();}
+}
+
+/* ═══ ADMIN · LIVE CARTS (who / when / what · search by cart code) ═══ */
+function CartsMod({carts,setCarts}){
+  const [q,setQ]=useState("");
+  const [sel,setSel]=useState(null);
+  const now=Date.now();
+  const live=carts.map(c=>{
+    let s=c.status;
+    if(s==="active"&&(now-new Date(c.updatedAt).getTime())>CART_STALE_MIN*60000)s="abandoned";
+    return{...c,liveState:s};
+  });
+  const ql=q.trim().toLowerCase();
+  const filtered=(ql?live.filter(c=>(c.code||"").toLowerCase().includes(ql)||(c.owner||"").toLowerCase().includes(ql)||(c.email||"").toLowerCase().includes(ql)):live)
+    .sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||""));
+  const count=k=>live.filter(c=>c.liveState===k).length;
+  const stateTone=s=>s==="active"?"emerald":s==="abandoned"?"amber":s==="converted"?"blue":"stone";
+  const stateLbl=s=>s==="active"?"Activo (en vivo)":s==="abandoned"?"Abandonado":s==="converted"?"Convertido":s;
+  const cartTotal=c=>(c.items||[]).reduce((s,i)=>s+Number(i.rate||0)+Number(i.deposit||0),0);
+  return <div>
+    <p className="text-stone-600 text-sm mb-5">Intenciones de compra en tiempo real. Cada carrito creado (incluidos los abandonados) queda registrado con <strong>quién, cuándo y qué</strong>. Busca por código de carrito.</p>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
+      <St label="Total carritos" value={live.length} icon={Package}/>
+      <St label="Activos (en vivo)" value={count("active")} icon={Activity} trend="up"/>
+      <St label="Abandonados" value={count("abandoned")} icon={Clock} trend="down"/>
+      <St label="Convertidos" value={count("converted")} icon={Check} trend="up"/>
+    </div>
+    <div className="bg-white border border-stone-200 rounded-2xl p-4 mb-4 flex flex-wrap gap-3 items-center">
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 Buscar por código (CART-XXXXXX), cliente o email..." className="flex-1 min-w-[260px] px-3 py-2 border border-stone-200 rounded-lg text-sm font-mono"/>
+      {q&&<button onClick={()=>setQ("")} className="px-3 py-2 border border-stone-200 rounded-lg text-xs font-semibold text-stone-600">✕ Limpiar</button>}
+      <span className="text-xs text-stone-500 ml-auto">{filtered.length} de {live.length}</span>
+    </div>
+    <div className="flex gap-6">
+      <div className={`${sel?"w-3/5":"flex-1"} transition-all`}>
+        <SC title={`Carritos (${filtered.length})`} padded={false}>
+          {filtered.length===0?<div className="text-center py-16 text-stone-400"><Package className="w-8 h-8 mx-auto mb-2"/><p>Sin carritos registrados</p><p className="text-[11px] mt-1">Se crean cuando un visitante agrega un equipo al carrito.</p></div>
+          :<DT headers={["Código","Quién","Artículos","Total","Actualizado","Estado",""]} rows={filtered.map(c=>[
+            <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded">{c.code}</span>,
+            <div><div className="font-semibold text-sm">{c.owner||"—"}</div><div className="text-[10px] text-stone-400">{c.email||"sin sesión"}</div></div>,
+            <span className="text-sm">{(c.items||[]).length} ítem(s)</span>,
+            <span className="font-semibold text-stone-700">{$f(cartTotal(c))}</span>,
+            <span className="text-xs text-stone-500">{fmtDateTime(c.updatedAt)}</span>,
+            <Pill tone={stateTone(c.liveState)}>{stateLbl(c.liveState)}</Pill>,
+            <button onClick={()=>setSel(c)} className="p-1.5 hover:bg-stone-100 rounded-lg"><Eye className="w-3.5 h-3.5"/></button>,
+          ])}/>}
+        </SC>
+      </div>
+      {sel&&<div className="w-2/5 min-w-[320px] sticky top-24 h-fit">
+        <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 bg-blue-50">
+            <span className="font-mono font-bold text-blue-700">{sel.code}</span>
+            <button onClick={()=>setSel(null)} className="p-1.5 hover:bg-blue-100 rounded-full"><Xx className="w-4 h-4"/></button>
+          </div>
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              {[["Cliente",sel.owner],["Email",sel.email||"sin sesión"],["Creado",fmtDateTime(sel.createdAt)],["Última actividad",fmtDateTime(sel.updatedAt)]].map(([l,v])=><div key={l} className="bg-stone-50 rounded-lg p-3"><div className="text-[10px] text-stone-400 uppercase font-semibold">{l}</div><div className="font-medium mt-0.5 text-sm break-words">{v}</div></div>)}
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-stone-500 uppercase mb-2">Contenido del carrito</div>
+              <div className="space-y-2">{(sel.items||[]).map((i,ix)=><div key={ix} className="flex items-center gap-3 p-3 bg-stone-50 rounded-lg">
+                <span className="text-2xl">{i.emoji||"🚛"}</span>
+                <div className="flex-1 min-w-0"><div className="font-semibold text-sm">{i.name}</div><div className="text-[11px] text-stone-400">{i.sd||"?"} → {i.ed||"?"} · {i.days||0}d · x{i.qty||1}</div></div>
+                <div className="text-right text-sm font-semibold">{$f(Number(i.rate||0)+Number(i.deposit||0))}</div>
+              </div>)}</div>
+            </div>
+            {sel.orderRefs&&sel.orderRefs.length>0&&<div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800">Convertido en pedido(s): <span className="font-mono font-bold">{sel.orderRefs.join(", ")}</span></div>}
+            <button onClick={()=>setCarts(p=>p.filter(c=>c.code!==sel.code))||setSel(null)} className="w-full py-2 bg-red-50 text-red-700 border border-red-200 rounded-xl text-xs font-semibold">Eliminar registro de carrito</button>
+          </div>
+        </div>
+      </div>}
+    </div>
+  </div>;
+}
+
+/* ═══ ADMIN · PEDIDOS & VALIDACIÓN DE PAGOS ═══ */
+function OrdersPayMod({orders,setOrders,approveOrder,rejectOrder}){
+  const [tab,setTab]=useState("pending");
+  const [q,setQ]=useState("");
+  const [sel,setSel]=useState(null);
+  const pending=orders.filter(o=>o.status==="Pendiente");
+  const ql=q.trim().toLowerCase();
+  const pool=tab==="pending"?pending:orders;
+  const filtered=(ql?pool.filter(o=>(o.oid||"").toLowerCase().includes(ql)||(o.invNum||"").toLowerCase().includes(ql)||(o.un||"").toLowerCase().includes(ql)||(o.ue||"").toLowerCase().includes(ql)):pool)
+    .sort((a,b)=>(b.od||"").localeCompare(a.od||""));
+  const methodLbl={card:"Stripe (tarjeta)",zelle:"Zelle",cash:"Cash / Cheque",invoice:"Crédito / Factura"};
+  const payTone=o=>o.payState==="approved"?"emerald":o.payState==="awaiting_validation"?"amber":o.payState==="awaiting_cash"?"amber":o.payState==="rejected"?"red":"stone";
+  const payLbl=o=>o.payState==="approved"?"Aprobado":o.payState==="awaiting_validation"?"Por validar":o.payState==="awaiting_cash"?"Cash pendiente":o.payState==="rejected"?"Rechazado":(o.payState||"—");
+  return <div>
+    <p className="text-stone-600 text-sm mb-5">Pedidos generados desde el carrito. Valida pagos manuales (Zelle / Cash), busca por número de pedido y revisa la expiración de pendientes (máx. {PENDING_TTL_DAYS} días).</p>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
+      <St label="Por validar" value={pending.length} icon={AlertTriangle} trend="down"/>
+      <St label="Stripe (auto)" value={orders.filter(o=>o.payMethod==="card").length} icon={CreditCard} trend="up"/>
+      <St label="Zelle" value={orders.filter(o=>o.payMethod==="zelle").length} icon={DollarSign}/>
+      <St label="Cash / Cheque" value={orders.filter(o=>o.payMethod==="cash").length} icon={DollarSign}/>
+    </div>
+    <div className="flex items-center gap-2 mb-4 flex-wrap">
+      <div className="inline-flex bg-stone-100 rounded-full p-1">
+        <button onClick={()=>{setTab("pending");setSel(null)}} className={`px-4 py-1.5 rounded-full text-xs font-semibold ${tab==="pending"?"bg-white text-blue-900 shadow-sm":"text-stone-600"}`}>⏳ Por validar ({pending.length})</button>
+        <button onClick={()=>{setTab("all");setSel(null)}} className={`px-4 py-1.5 rounded-full text-xs font-semibold ${tab==="all"?"bg-white text-blue-900 shadow-sm":"text-stone-600"}`}>📋 Todos</button>
+      </div>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 Buscar por N.º de pedido (ORD-...), factura, cliente..." className="flex-1 min-w-[240px] px-3 py-2 border border-stone-200 rounded-lg text-sm font-mono"/>
+      {q&&<button onClick={()=>setQ("")} className="px-3 py-2 border border-stone-200 rounded-lg text-xs font-semibold text-stone-600">✕</button>}
+    </div>
+    <div className="flex gap-6">
+      <div className={`${sel?"w-3/5":"flex-1"} transition-all`}>
+        <SC title={`Pedidos (${filtered.length})`} padded={false}>
+          {filtered.length===0?<div className="text-center py-16 text-stone-400"><FileText className="w-8 h-8 mx-auto mb-2"/><p>Sin pedidos</p></div>
+          :<DT headers={["N.º Pedido","Cliente","Método","Pago","Estado","Expira",""]} rows={filtered.map(o=>{
+            const dl=o.status==="Pendiente"?daysLeft(o.expiresAt):null;
+            return [
+            <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded">{o.oid}</span>,
+            <div><div className="font-semibold text-sm">{o.un||"—"}</div><div className="text-[10px] text-stone-400">{o.ue}</div></div>,
+            <span className="text-xs font-medium">{methodLbl[o.payMethod]||o.payMethod||"—"}</span>,
+            <Pill tone={payTone(o)}>{payLbl(o)}</Pill>,
+            <Pill tone={o.status==="Pendiente"?"amber":o.status==="Confirmed"?"blue":o.status==="Cancelled"?"red":"stone"}>{o.status}</Pill>,
+            <span className={`text-xs ${dl!=null&&dl<=5?"text-red-600 font-bold":"text-stone-500"}`}>{dl!=null?`${dl}d`:"—"}</span>,
+            <button onClick={()=>setSel(o)} className="p-1.5 hover:bg-stone-100 rounded-lg"><Eye className="w-3.5 h-3.5"/></button>,
+          ]})}/>}
+        </SC>
+      </div>
+      {sel&&(()=>{const o=orders.find(x=>x.oid===sel.oid)||sel;const dl=o.status==="Pendiente"?daysLeft(o.expiresAt):null;return <div className="w-2/5 min-w-[340px] sticky top-24 h-fit">
+        <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 bg-blue-50">
+            <span className="font-mono font-bold text-blue-700">{o.oid}</span>
+            <button onClick={()=>setSel(null)} className="p-1.5 hover:bg-blue-100 rounded-full"><Xx className="w-4 h-4"/></button>
+          </div>
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              {[["Cliente",o.un],["Email",o.ue],["Método",methodLbl[o.payMethod]||o.payMethod],["Factura",o.invNum||"—"]].map(([l,v])=><div key={l} className="bg-stone-50 rounded-lg p-3"><div className="text-[10px] text-stone-400 uppercase font-semibold">{l}</div><div className="font-medium mt-0.5 text-sm break-words">{v||"—"}</div></div>)}
+            </div>
+            {o.status==="Pendiente"&&<div className={`p-3 rounded-xl border text-xs ${dl!=null&&dl<=5?"bg-red-50 border-red-200 text-red-800":"bg-amber-50 border-amber-200 text-amber-800"}`}><div className="font-semibold flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/>Expira en {dl} día(s)</div><p className="mt-1">Los pedidos pendientes se eliminan automáticamente a los {PENDING_TTL_DAYS} días si no se valida el pago.</p></div>}
+            {o.payMethod==="zelle"&&o.payDetail&&<div className="p-3 bg-stone-50 rounded-xl text-xs space-y-1">
+              <div className="font-semibold text-stone-700 uppercase mb-1">Reporte Zelle</div>
+              <div><span className="text-stone-400">Remitente:</span> {o.payDetail.zelleFrom||"—"}</div>
+              <div><span className="text-stone-400">Titular:</span> {o.payDetail.zelleName||"—"}</div>
+              <div><span className="text-stone-400">Monto:</span> ${o.payDetail.zelleAmount||"—"}</div>
+              <div><span className="text-stone-400">Comprobante:</span> {o.payDetail.zelleProof?<span className="text-emerald-700 font-semibold">📎 {o.payDetail.zelleProof}</span>:<span className="text-red-600">no adjunto</span>}</div>
+            </div>}
+            {o.payMethod==="cash"&&<div className="p-3 bg-stone-50 rounded-xl text-xs"><div className="font-semibold text-stone-700 uppercase mb-1">Cash / Cheque</div><p>Cliente debe coordinar pago en oficina. Tel directo: <strong>{SUPPORT.phone}</strong>. Aprueba al recibir el pago.</p></div>}
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <div className="flex justify-between text-sm mb-1"><span className="text-stone-500">Renta</span><span className="font-semibold">{$f(o.tp||0)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-stone-500">Depósito</span><span className="font-bold text-emerald-700">{$f(o.dp||o.reservationPaid||0)}</span></div>
+            </div>
+            {o.status==="Pendiente"?<div className="flex flex-col gap-2">
+              <button onClick={()=>{approveOrder(o.oid);setSel(null)}} className="w-full py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-2"><Check className="w-4 h-4"/>Aprobar pago · enviar contrato y confirmación</button>
+              <button onClick={()=>{rejectOrder(o.oid);setSel(null)}} className="w-full py-2 bg-red-50 text-red-700 border border-red-200 rounded-xl text-xs font-semibold">Rechazar pago</button>
+            </div>:<div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2"><Check className="w-4 h-4"/>Pago {o.payState==="approved"?"aprobado":"procesado"}{o.approvedAt?` el ${fmtDateTime(o.approvedAt)}`:""}. Contrato enviado.</div>}
+          </div>
+        </div>
+      </div>})()}
+    </div>
+  </div>;
+}
+
+/* ═══ ADMIN · CRÉDITOS & MORA (facturación · solo admin) ═══ */
+function CreditMod({creditLines,setCreditLines,orders}){
+  const [form,setForm]=useState({clientName:"",email:"",limit:"",terms:"30"});
+  const [showForm,setShowForm]=useState(false);
+  const grant=()=>{
+    if(!form.clientName||!form.email||!form.limit)return;
+    setCreditLines(p=>[{id:genCode("CL"),clientName:form.clientName,email:form.email.toLowerCase(),limit:Number(form.limit),terms:Number(form.terms)||30,grantedAt:nowISO(),active:true},...p.filter(c=>c.email!==form.email.toLowerCase())]);
+    setForm({clientName:"",email:"",limit:"",terms:"30"});setShowForm(false);
+  };
+  /* outstanding = credit/invoice orders not yet settled, attributed to the client email */
+  const outstandingFor=(email)=>orders.filter(o=>(o.payMethod==="invoice"||o.payMethod==="credit")&&o.ue===email&&o.status!=="Cancelled"&&!o.settlementPaid).reduce((s,o)=>s+(o.tp||0),0);
+  const creditOrders=orders.filter(o=>(o.payMethod==="invoice"||o.payMethod==="credit")&&o.status!=="Cancelled");
+  /* overdue: credit order whose due date (approvedAt + client terms, fallback 30d) is in the past and not settled */
+  const today=new Date().toISOString().split("T")[0];
+  const overdue=creditOrders.filter(o=>{
+    if(o.settlementPaid)return false;
+    const cl=creditLines.find(c=>c.email===o.ue);
+    const base=o.approvedAt||o.od||nowISO();
+    const due=new Date(new Date(base).getTime()+((cl?.terms||30)*86400000)).toISOString().split("T")[0];
+    return due<today;
+  }).map(o=>{
+    const cl=creditLines.find(c=>c.email===o.ue);
+    const base=o.approvedAt||o.od||nowISO();
+    const due=new Date(new Date(base).getTime()+((cl?.terms||30)*86400000));
+    const daysLate=Math.floor((Date.now()-due.getTime())/86400000);
+    return{...o,due:due.toISOString().split("T")[0],daysLate};
+  }).sort((a,b)=>b.daysLate-a.daysLate);
+  const lateTone=d=>d>30?"red":d>15?"amber":"stone";
+  return <div>
+    <p className="text-stone-600 text-sm mb-5">Acceso exclusivo del administrador. Otorga líneas de crédito a clientes y detecta clientes en mora (pagos atrasados).</p>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
+      <St label="Líneas de crédito" value={creditLines.filter(c=>c.active).length} icon={CreditCard}/>
+      <St label="Crédito otorgado" value={$f(creditLines.filter(c=>c.active).reduce((s,c)=>s+c.limit,0))} icon={DollarSign} trend="up"/>
+      <St label="Clientes en mora" value={overdue.length} icon={AlertTriangle} trend="down"/>
+      <St label="Monto en mora" value={$f(overdue.reduce((s,o)=>s+(o.tp||0),0))} icon={TrendingDown} trend="down"/>
+    </div>
+
+    {/* CREDIT LINES */}
+    <SC title={`Líneas de crédito (${creditLines.length})`} action={<button onClick={()=>setShowForm(!showForm)} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-900 text-white rounded-full text-xs font-semibold"><Plus className="w-3.5 h-3.5"/>Otorgar crédito</button>}>
+      {showForm&&<div className="mb-4 p-4 bg-stone-50 rounded-xl grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <div className="ig"><label className="text-xs font-medium text-stone-600">Cliente</label><input className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm" value={form.clientName} onChange={e=>setForm({...form,clientName:e.target.value})} placeholder="Nombre"/></div>
+        <div className="ig"><label className="text-xs font-medium text-stone-600">Email</label><input className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="cliente@email.com"/></div>
+        <div className="ig"><label className="text-xs font-medium text-stone-600">Límite ($)</label><input className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm" type="number" value={form.limit} onChange={e=>setForm({...form,limit:e.target.value})} placeholder="5000"/></div>
+        <div className="ig"><label className="text-xs font-medium text-stone-600">Plazo (días)</label><div className="flex gap-2"><input className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm" type="number" value={form.terms} onChange={e=>setForm({...form,terms:e.target.value})}/><button onClick={grant} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold shrink-0">OK</button></div></div>
+      </div>}
+      {creditLines.length===0?<div className="text-center py-10 text-stone-400 text-sm">Sin líneas de crédito. Otorga una manualmente.</div>
+      :<DT headers={["Cliente","Email","Límite","En uso","Disponible","Plazo","Estado",""]} rows={creditLines.map(c=>{const used=outstandingFor(c.email);return [
+        <span className="font-semibold text-sm">{c.clientName}</span>,
+        <span className="text-xs text-stone-500">{c.email}</span>,
+        <span className="font-semibold">{$f(c.limit)}</span>,
+        <span className="text-amber-700 font-medium">{$f(used)}</span>,
+        <span className={`font-semibold ${c.limit-used<0?"text-red-600":"text-emerald-700"}`}>{$f(c.limit-used)}</span>,
+        <span className="text-xs">{c.terms}d</span>,
+        <Pill tone={c.active?"emerald":"stone"}>{c.active?"Activa":"Inactiva"}</Pill>,
+        <button onClick={()=>setCreditLines(p=>p.map(x=>x.id===c.id?{...x,active:!x.active}:x))} className="text-xs font-semibold text-blue-700 hover:underline">{c.active?"Desactivar":"Activar"}</button>,
+      ]})}/>}
+    </SC>
+
+    {/* OVERDUE / MORA */}
+    <div className="mt-6">
+      <SC title={`Clientes en mora (${overdue.length})`} padded={false}>
+        {overdue.length===0?<div className="text-center py-12 text-stone-400"><Check className="w-8 h-8 mx-auto mb-2 text-emerald-500"/><p className="text-sm">Sin pagos atrasados 🎉</p></div>
+        :<DT headers={["N.º Pedido","Cliente","Monto","Vencía","Días en mora"]} rows={overdue.map(o=>[
+          <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded">{o.oid}</span>,
+          <div><div className="font-semibold text-sm">{o.un}</div><div className="text-[10px] text-stone-400">{o.ue}</div></div>,
+          <span className="font-semibold text-red-700">{$f(o.tp||0)}</span>,
+          <span className="text-xs text-stone-500">{o.due}</span>,
+          <Pill tone={lateTone(o.daysLate)}>{o.daysLate} días</Pill>,
+        ])}/>}
+      </SC>
+    </div>
+  </div>;
+}
+
+/* ═══ ADMIN · CONTRATOS DE RENTA (auto-generados al aprobar el pago) ═══ */
+function ContractsMod({contracts,setContracts,contractTpl,setContractTpl}){
+  const [tab,setTab]=useState("list");
+  const [draft,setDraft]=useState(contractTpl);
+  const [view,setView]=useState(null);
+  const VARS=["contract_number","order_number","issue_date","approved_date","client_name","client_email","client_phone","rental_start","rental_end","subtotal","deposit_total","total","payment_method","items"];
+  return <div>
+    <p className="text-stone-600 text-sm mb-5">Contratos de renta generados automáticamente y enviados al cliente <strong>en el momento en que el admin aprueba el pago</strong>. Incluyen el listado de productos del pedido.</p>
+    <div className="flex items-center gap-1 bg-white border border-stone-200 rounded-full p-1 mb-6 w-fit">
+      {[["list","Contratos emitidos"],["tpl","Plantilla"]].map(([k,l])=><button key={k} onClick={()=>setTab(k)} className={`px-4 py-2 rounded-full text-sm font-medium ${tab===k?"bg-blue-900 text-white":"text-stone-600"}`}>{l}</button>)}
+    </div>
+    {tab==="list"&&<SC title={`Contratos (${contracts.length})`} padded={false}>
+      {contracts.length===0?<div className="text-center py-16 text-stone-400"><FileText className="w-8 h-8 mx-auto mb-2"/><p>Sin contratos. Se emiten al aprobar un pago.</p></div>
+      :<DT headers={["N.º Contrato","Pedido","Cliente","Emitido","Estado",""]} rows={contracts.map(c=>[
+        <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded">{c.contractNum}</span>,
+        <span className="font-mono text-xs">{c.oid}</span>,
+        <div><div className="font-semibold text-sm">{c.client}</div><div className="text-[10px] text-stone-400">{c.email}</div></div>,
+        <span className="text-xs text-stone-500">{fmtDateTime(c.createdAt)}</span>,
+        <Pill tone="blue">📧 Enviado</Pill>,
+        <div className="flex gap-1"><button onClick={()=>setView(c)} className="p-1.5 hover:bg-stone-100 rounded-lg"><Eye className="w-3.5 h-3.5"/></button><button onClick={()=>printContract(c)} className="p-1.5 hover:bg-blue-50 text-blue-700 rounded-lg"><Download className="w-3.5 h-3.5"/></button></div>,
+      ])}/>}
+    </SC>}
+    {tab==="tpl"&&<div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <SC title="Editor de plantilla">
+        <div className="space-y-3">
+          <div><label className="block text-xs font-medium text-stone-600 mb-1">Título</label><input className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm" value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})}/></div>
+          <div><label className="block text-xs font-medium text-stone-600 mb-1">Cuerpo (usa variables {`{{...}}`})</label><textarea rows={16} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-xs font-mono" value={draft.body} onChange={e=>setDraft({...draft,body:e.target.value})}/></div>
+          <div><label className="block text-xs font-medium text-stone-600 mb-1">Pie</label><input className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm" value={draft.footer} onChange={e=>setDraft({...draft,footer:e.target.value})}/></div>
+          <div className="flex flex-wrap gap-1">{VARS.map(v=><button key={v} onClick={()=>setDraft(p=>({...p,body:p.body+`{{${v}}}`}))} className="px-2 py-1 bg-stone-100 hover:bg-blue-50 hover:text-blue-700 rounded text-[10px] font-mono">{`{{${v}}}`}</button>)}</div>
+          <div className="flex gap-2"><button onClick={()=>setContractTpl(draft)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold">Guardar plantilla</button><button onClick={()=>setDraft(DEFAULT_CONTRACT_TPL)} className="px-4 py-2 bg-stone-100 text-stone-700 rounded-lg text-sm font-semibold">Restaurar</button></div>
+        </div>
+      </SC>
+      <SC title="Vista previa (datos de muestra)">
+        {(()=>{const sample={oid:"ORD-DEMO12",un:"Cliente de Muestra",ue:"cliente@muestra.com",bPhone:"(469) 555-0000",sd:"2026-07-01",ed:"2026-07-08",days:7,payMethod:"Stripe",approvedAt:nowISO(),items:[{name:"Freightliner Cascadia",cat:"Daycab",days:7,qty:1,rate:1155,deposit:500}]};const r=renderContract(draft,sample);return <div><div className="font-bold text-sm text-blue-900 mb-2">{r.title}</div><pre className="whitespace-pre-wrap text-[11px] leading-relaxed text-stone-700 bg-stone-50 p-3 rounded-lg max-h-[420px] overflow-auto">{r.body}</pre><div className="text-[10px] text-stone-400 mt-2">{r.footer}</div></div>})()}
+      </SC>
+    </div>}
+    {view&&<div style={{position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.4)",padding:16}} onClick={()=>setView(null)}>
+      <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white"><span className="font-mono font-bold text-blue-700">{view.contractNum}</span><div className="flex gap-2"><button onClick={()=>printContract(view)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1"><Download className="w-3.5 h-3.5"/>Imprimir / PDF</button><button onClick={()=>setView(null)} className="p-1.5 hover:bg-stone-100 rounded-full"><Xx className="w-4 h-4"/></button></div></div>
+        <div className="p-5"><div className="font-bold text-blue-900 mb-3">{view.title}</div><pre className="whitespace-pre-wrap text-xs leading-relaxed text-stone-700">{view.body}</pre><div className="text-[10px] text-stone-400 mt-4 border-t pt-3">{view.footer}</div></div>
+      </div>
+    </div>}
+  </div>;
+}
+
 /* ═══════════════ APP ═══════════════ */
 export default function App(){
   const [view,setView]=useState("home");
@@ -2745,7 +3123,13 @@ export default function App(){
   const [cart,setCart]=useState([]);
   const [showCart,setShowCart]=useState(false);
   const [cartOpen,setCartOpen]=useState(false);
-  const [orders,setOrders]=useState([
+  /* Live carts registry + persistent stores (demo): swap for Supabase later */
+  const [carts,setCarts]=usePersistentState("btop_carts",[]);
+  const [cartCode,setCartCode]=usePersistentState("btop_cartCode",null);
+  const [contracts,setContracts]=usePersistentState("btop_contracts",[]);
+  const [contractTpl,setContractTpl]=usePersistentState("btop_contractTpl",DEFAULT_CONTRACT_TPL);
+  const [creditLines,setCreditLines]=usePersistentState("btop_creditLines",[]);
+  const [orders,setOrders]=usePersistentState("btop_orders",[
     /* Seed orders matching the 3 seed deliveries so Reservations and Headquarters show the same events */
     {oid:"ORD-ABC123",invNum:"INV-0097",status:"Confirmed",phase:"reservation",od:"2026-04-05",un:"Carlos Mendez",ue:"carlos@email.com",un2:"Freightliner Cascadia",uid:"v2",plate:"TX-16000",ut:"Regional hauling daycab.",sd:"2026-04-10",ed:"2026-04-24",days:14,qty:1,tp:2310,dp:500,reservationPaid:500,mr:0.15,miles:0,payMethod:"Stripe",ui:"🚚",settlementPaid:false,settlementTotal:0},
     {oid:"ORD-DEF456",invNum:"INV-0098",status:"Confirmed",phase:"reservation",od:"2026-04-08",un:"Laura Vega",ue:"laura@email.com",un2:"GMC 3500 Box Truck",uid:"v6",plate:"TX-1212",ut:"16ft box truck.",sd:"2026-04-12",ed:"2026-04-19",days:7,qty:1,tp:300,dp:150,reservationPaid:150,mr:0.15,miles:0,payMethod:"PayPal",ui:"🚐",settlementPaid:false,settlementTotal:0},
@@ -2778,6 +3162,51 @@ export default function App(){
   const rmCart=id=>setCart(p=>p.filter(i=>i.cid!==id));
   const cTotal=cart.reduce((s,i)=>s+i.tp+i.dp,0);
 
+  /* Sync the active cart into the live registry so the admin sees who/when/what in real time */
+  useEffect(()=>{
+    if(!cart.length)return;
+    let code=cartCode;
+    if(!code){code=genCode("CART");setCartCode(code);}
+    const items=cart.map(i=>({name:i.un,cat:i.ut,days:i.days,sd:dateToStr(i.sd),ed:dateToStr(i.ed),qty:i.qty||1,rate:i.tp||0,deposit:i.dp||0,emoji:i.ui}));
+    setCarts(prev=>{
+      const idx=prev.findIndex(c=>c.code===code);
+      const owner=user?user.name:"Invitado (sin sesión)";
+      const email=user?user.email:"";
+      if(idx>=0){const n=[...prev];n[idx]={...n[idx],owner,email:email||n[idx].email,userRole:user?user.role:n[idx].userRole,status:n[idx].status==="converted"?"converted":"active",updatedAt:nowISO(),items};return n;}
+      return [{code,owner,email,userRole:user?user.role:"guest",status:"active",createdAt:nowISO(),updatedAt:nowISO(),items,orderRefs:[]},...prev];
+    });
+  },[cart,user]); /* cartCode intentionally omitted to avoid re-run loops */
+
+  /* Auto-expire & purge pending orders older than 30 days (runs on mount + hourly) */
+  useEffect(()=>{
+    const sweep=()=>setOrders(prev=>prev.filter(o=>!(o.status==="Pendiente"&&o.expiresAt&&new Date(o.expiresAt).getTime()<=Date.now())));
+    sweep();
+    const iv=setInterval(sweep,3600000);
+    return()=>clearInterval(iv);
+  },[]);
+
+  /* Auto-generate the rental contract for a paid/approved order (idempotent: one per order) */
+  const sendContract=(order)=>{
+    const r=renderContract(contractTpl,order);
+    const rec={id:genCode("CT"),contractNum:r.contractNum,oid:order.oid,client:order.un,email:order.ue,createdAt:nowISO(),status:"sent",title:r.title,body:r.body,footer:r.footer};
+    setContracts(p=>p.some(c=>c.oid===order.oid)?p:[rec,...p]);
+    return rec;
+  };
+  /* Admin validates a manual payment (Zelle/Cash/Invoice) → confirm + send contract + confirmation email */
+  const approveOrder=(oid)=>{
+    const o=orders.find(x=>x.oid===oid);
+    if(!o)return;
+    const approved={...o,status:"Confirmed",payState:"approved",approvedAt:nowISO(),expiresAt:null};
+    setOrders(p=>p.map(x=>x.oid===oid?approved:x));
+    if(sendConfirmationEmail)sendConfirmationEmail(approved);
+    const c=sendContract(approved);
+    t(`Pago aprobado · contrato ${c.contractNum} enviado a ${approved.ue}`,"success");
+  };
+  const rejectOrder=(oid)=>{
+    setOrders(p=>p.map(x=>x.oid===oid?{...x,status:"Cancelled",payState:"rejected"}:x));
+    t("Pago rechazado. Pedido cancelado.","error");
+  };
+
   const goCheckout=()=>{
     if(!user){t("Please sign in first","error");return}
     if(!cart.length)return;
@@ -2796,17 +3225,29 @@ export default function App(){
     }
     const invBase="INV-"+String(orders.length+100).padStart(4,"0");
     const today=new Date().toISOString().split("T")[0];
+    /* Stripe/PayPal: the gateway is the authority → auto-approved. Zelle/Cash/Invoice: pending manual validation. */
+    const auto=payMethod==="card"||payMethod==="paypal";
+    const expISO=new Date(Date.now()+PENDING_TTL_DAYS*86400000).toISOString();
     const nw=cart.map((i,idx)=>({...i,
       oid:"ORD-"+Math.random().toString(36).substr(2,8).toUpperCase(),
       invNum:invBase+(cart.length>1?"-"+(idx+1):""),
-      status:"Reserved",phase:"reservation",
+      status:auto?"Confirmed":"Pendiente",
+      payState:auto?"approved":(payMethod==="cash"?"awaiting_cash":"awaiting_validation"),
+      approvedAt:auto?nowISO():null,
+      expiresAt:auto?null:expISO,
+      phase:"reservation",
       od:today,
       ue:user.email,un:user.name,
       payMethod,payDetail,
+      dp:i.dp||0,
       reservationPaid:i.dp||0,
       settlementStatus:"pending",settlementTotal:0,settlementNotes:"",settlementPaid:false,
     }));
     setOrders(p=>[...p,...nw]);
+    /* Auto-approved gateways immediately get a confirmation email + rental contract */
+    if(auto)nw.forEach(o=>{if(sendConfirmationEmail)sendConfirmationEmail(o);sendContract(o);});
+    /* Mark the live cart as converted and release the active cart code */
+    if(cartCode){setCarts(prev=>prev.map(c=>c.code===cartCode?{...c,status:"converted",updatedAt:nowISO(),orderRefs:nw.map(o=>o.oid)}:c));setCartCode(null);}
     /* Mirror each line to deliveries so Headquarters sees the same event */
     const newDeliveries=nw.map(o=>({
       id:"d"+Date.now()+"_"+Math.random().toString(36).slice(2,6),
@@ -2845,8 +3286,8 @@ export default function App(){
         return{...sp,status:"occupied",...rentalEntry,activeOid:matched.oid,activeInvNum:matched.invNum};
       }));
     }
-    /* Trigger alarm for admin — only for new reservations (vehicle or space), not for messages */
-    if(alarmEnabled)setAlarmActive(true);
+    /* Trigger alarm for admin — manual-validation payments (Zelle/Cash/Invoice) need attention */
+    if(alarmEnabled&&!auto)setAlarmActive(true);
     setCart([]);setView("client");
   };
   const doLogin=(email,pw)=>{
@@ -2924,7 +3365,7 @@ body{font-family:var(--f);background:var(--g0);color:var(--g9)}input,select,text
       {view==="register"&&<Re dr={doReg} sv={setView}/>}
       {view==="forgot"&&<Fo t={t} sv={setView}/>}
       {view==="book"&&<Bk fleet={fleet} ac={addCart} sv={setView} t={t} bookings={fleetBookings}/>}
-      {view==="admin"&&user?.role==="admin"&&<Ad fleet={fleet} sf={setFleet} spaces={spaces} setSpaces={setSpaces} contacts={contacts} setContacts={setContacts} orders={orders} setOrders={setOrders} t={t} sv={setView} messages={messages} setMessages={setMessages} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} logout={logout} alarmEnabled={alarmEnabled} setAlarmEnabled={setAlarmEnabled} alarmActive={alarmActive} setAlarmActive={setAlarmActive} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars}/>}
+      {view==="admin"&&user?.role==="admin"&&<Ad fleet={fleet} sf={setFleet} spaces={spaces} setSpaces={setSpaces} contacts={contacts} setContacts={setContacts} orders={orders} setOrders={setOrders} t={t} sv={setView} messages={messages} setMessages={setMessages} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} logout={logout} alarmEnabled={alarmEnabled} setAlarmEnabled={setAlarmEnabled} alarmActive={alarmActive} setAlarmActive={setAlarmActive} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars} carts={carts} setCarts={setCarts} contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl} creditLines={creditLines} setCreditLines={setCreditLines} approveOrder={approveOrder} rejectOrder={rejectOrder}/>}
       {view==="hqfield"&&(user?.role==="sede"||user?.role==="admin")&&<FieldHQ fleet={fleet} spaces={spaces} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} user={user} sv={setView} logout={logout}/>}
       {view==="checkout"&&user&&<CheckoutPage cart={cart} rmCart={rmCart} cTotal={cTotal} user={user} confirm={confirmOrder} cancel={()=>setView("home")} sv={setView}/>}
       {view==="client"&&user?.role==="client"&&<Cl orders={orders.filter(o=>o.ue===user.email)} sv={setView} user={user} contacts={contacts} setContacts={setContacts} logout={logout}/>}
@@ -3643,33 +4084,52 @@ function Ct({cart,rm,co,total,sv,user,dl,dr}){
 function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv}){
   const [payMethod,setPayMethod]=useState("card");
   const [payDetail,setPayDetail]=useState({
-    /* Zelle */zelleFrom:"",zelleName:"",zelleAmount:"",zelleReceipt:false,zelleTime:"",
+    /* Zelle */zelleFrom:"",zelleName:"",zelleAmount:"",zelleReceipt:false,zelleTime:"",zelleProof:"",
     /* Cash */cashName:"",cashPhone:"",cashConfirm:false,cashTime:"",
     /* Invoice */invCompany:"",invTaxId:"",invBillEmail:"",invContact:"",invPhone:"",invAddress:"",invPO:"",
   });
-  const [step,setStep]=useState("review"); // review | payment | done
+  const [step,setStep]=useState("review"); // review | payment | redirect | done
+  const [cashModal,setCashModal]=useState(false);
   const upPay=(k,v)=>setPayDetail(p=>({...p,[k]:v}));
   const totalDep=cart.reduce((s,i)=>s+(i.dp||0),0);
   const totalRental=cart.reduce((s,i)=>s+(i.tp||0),0);
   const grandTotal=totalRental+totalDep;
 
   const doConfirm=()=>{
+    /* Stripe/PayPal: redirect to the hosted checkout, then the gateway confirms automatically */
+    if(payMethod==="card"||payMethod==="paypal"){
+      setStep("redirect");
+      setTimeout(()=>{confirm(payMethod,payDetail);setStep("done");},1400);
+      return;
+    }
     confirm(payMethod,payDetail);
     setStep("done");
   };
 
-  if(step==="done") return <div className="fi" style={{minHeight:"70vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
-    <div style={{maxWidth:500,textAlign:"center"}}>
-      <div style={{width:80,height:80,borderRadius:"50%",background:"#D1FAE5",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px"}}><X n="ok" s={40} c="var(--green)"/></div>
-      <h1 style={{fontSize:28,fontWeight:800,color:"var(--navy)",marginBottom:8}}>Reservation Confirmed!</h1>
-      <p style={{color:"var(--g5)",fontSize:16,marginBottom:12}}>Your reservation deposit has been processed. The remaining balance will be charged at vehicle delivery.</p>
-      <p style={{color:"var(--b6)",fontSize:14,fontWeight:600,marginBottom:24}}>You can track your reservation status in your profile.</p>
-      <div style={{display:"flex",gap:12,justifyContent:"center"}}>
-        <button onClick={()=>sv("client")} className="btn bp blg">View My Rentals</button>
-        <button onClick={()=>sv("home")} className="btn bs blg">Back to Home</button>
-      </div>
+  if(step==="redirect") return <div className="fi" style={{minHeight:"70vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+    <div style={{maxWidth:440,textAlign:"center"}}>
+      <div style={{width:72,height:72,borderRadius:18,background:payMethod==="paypal"?"linear-gradient(135deg,#003087,#009cde)":"#635BFF",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px",color:"#fff",fontWeight:800,fontSize:22}}>{payMethod==="paypal"?"PP":"S"}</div>
+      <h1 style={{fontSize:22,fontWeight:800,color:"var(--navy)",marginBottom:8}}>Redirigiendo a {payMethod==="paypal"?"PayPal":"Stripe"}…</h1>
+      <p style={{color:"var(--g5)",fontSize:15}}>Te estamos llevando al checkout seguro para procesar tu depósito de <strong>{$(totalDep)}</strong>.</p>
+      <div style={{marginTop:24,width:40,height:40,border:"3px solid var(--g2)",borderTopColor:"var(--b6)",borderRadius:"50%",margin:"24px auto 0",animation:"spin 0.8s linear infinite"}}/>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   </div>;
+
+  if(step==="done"){const pending=payMethod!=="card"&&payMethod!=="paypal";return <div className="fi" style={{minHeight:"70vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+    <div style={{maxWidth:520,textAlign:"center"}}>
+      <div style={{width:80,height:80,borderRadius:"50%",background:pending?"#FEF3C7":"#D1FAE5",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px"}}><X n={pending?"clock":"ok"} s={40} c={pending?"var(--orange)":"var(--green)"}/></div>
+      <h1 style={{fontSize:28,fontWeight:800,color:"var(--navy)",marginBottom:8}}>{pending?"¡Pedido recibido!":"¡Reserva confirmada!"}</h1>
+      {pending
+        ?<p style={{color:"var(--g5)",fontSize:16,marginBottom:12}}>Tu pago por <strong>{payMethod==="zelle"?"Zelle":payMethod==="cash"?"Efectivo / Cheque":"factura a crédito"}</strong> está <strong>en validación</strong>. En cuanto el administrador lo apruebe, recibirás por correo la <strong>confirmación y tu contrato de renta</strong>.</p>
+        :<p style={{color:"var(--g5)",fontSize:16,marginBottom:12}}>Tu depósito fue procesado. Recibirás por correo la confirmación y tu <strong>contrato de renta</strong>. El saldo restante se cobra en la entrega.</p>}
+      <p style={{color:"var(--b6)",fontSize:14,fontWeight:600,marginBottom:24}}>Puedes seguir el estado de tu pedido en tu perfil.</p>
+      <div style={{display:"flex",gap:12,justifyContent:"center"}}>
+        <button onClick={()=>sv("client")} className="btn bp blg">Ver mis rentas</button>
+        <button onClick={()=>sv("home")} className="btn bs blg">Volver al inicio</button>
+      </div>
+    </div>
+  </div>;}
 
   return <div className="fi" style={{padding:"40px 24px 100px"}}><div style={{maxWidth:900,margin:"0 auto"}}>
     <h1 className="st" style={{marginBottom:32}}>Checkout</h1>
@@ -3736,7 +4196,7 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv}){
         <h3 style={{fontWeight:700,color:"var(--navy)",marginBottom:20}}>Select Payment Method</h3>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12,marginBottom:24}}>
           {[["card","Credit / Debit Card","💳","Secure via Stripe"],["paypal","PayPal","PP","Pay with PayPal"],["zelle","Zelle","Z","Direct transfer"],["cash","Cash on Pickup","💵","Pay at our office"],["invoice","Company Invoice","📄","Net 30 billing"]].map(([v,l,ic,d])=>
-            <button key={v} onClick={()=>setPayMethod(v)} style={{padding:20,borderRadius:14,border:payMethod===v?"2px solid var(--b5)":"2px solid var(--g2)",background:payMethod===v?"var(--b0)":"#fff",cursor:"pointer",textAlign:"left"}}>
+            <button key={v} onClick={()=>{setPayMethod(v);if(v==="cash")setCashModal(true)}} style={{padding:20,borderRadius:14,border:payMethod===v?"2px solid var(--b5)":"2px solid var(--g2)",background:payMethod===v?"var(--b0)":"#fff",cursor:"pointer",textAlign:"left"}}>
               <div style={{fontSize:28,marginBottom:6}}>{ic}</div>
               <div style={{fontWeight:700,fontSize:14,color:"var(--navy)"}}>{l}</div>
               <div style={{fontSize:12,color:"var(--g5)",marginTop:2}}>{d}</div>
@@ -3779,6 +4239,10 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv}){
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               <div className="ig"><label>Amount Sent *</label><input className="inf" value={payDetail.zelleAmount||totalDep.toFixed(2)} onChange={e=>upPay("zelleAmount",e.target.value)} placeholder={totalDep.toFixed(2)}/></div>
               <div className="ig"><label>Time of Transfer</label><input className="inf" type="time" value={payDetail.zelleTime} onChange={e=>upPay("zelleTime",e.target.value)}/></div>
+            </div>
+            <div className="ig"><label>Comprobante de pago (adjunto) *</label>
+              <input type="file" accept="image/*,application/pdf" onChange={e=>upPay("zelleProof",e.target.files&&e.target.files[0]?e.target.files[0].name:"")} style={{fontSize:13,padding:"8px 0"}}/>
+              {payDetail.zelleProof&&<div style={{fontSize:12,color:"var(--green)",fontWeight:600,marginTop:4}}>📎 {payDetail.zelleProof} adjuntado</div>}
             </div>
             <label style={{display:"flex",alignItems:"flex-start",gap:12,padding:14,background:payDetail.zelleReceipt?"#D1FAE5":"#fff",borderRadius:10,border:payDetail.zelleReceipt?"2px solid var(--green)":"2px solid var(--g2)",cursor:"pointer"}}>
               <input type="checkbox" checked={payDetail.zelleReceipt} onChange={e=>upPay("zelleReceipt",e.target.checked)} style={{width:18,height:18,accentColor:"var(--green)",marginTop:2}}/>
@@ -3839,7 +4303,31 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv}){
 
       <div style={{display:"flex",gap:12}}>
         <button onClick={()=>setStep("review")} className="btn bs blg" style={{flex:1,justifyContent:"center"}}>← Back</button>
-        <button onClick={doConfirm} className="btn bp blg" style={{flex:2,justifyContent:"center",fontSize:16}}><X n="ok" s={18}/>Confirm Reservation & Pay Deposit</button>
+        <button onClick={doConfirm} className="btn bp blg" style={{flex:2,justifyContent:"center",fontSize:16}}><X n="ok" s={18}/>{payMethod==="card"||payMethod==="paypal"?"Ir al pago seguro":payMethod==="zelle"?"Enviar reporte de pago":payMethod==="cash"?"Generar pedido (pago en oficina)":"Confirmar pedido"}</button>
+      </div>
+    </div>}
+
+    {/* CASH / CHEQUE — CONTACT MODAL */}
+    {cashModal&&<div style={{position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.45)",padding:16}} onClick={()=>setCashModal(false)}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:20,maxWidth:440,width:"100%",padding:28,boxShadow:"0 20px 60px rgba(0,0,0,.25)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}><div style={{width:48,height:48,borderRadius:14,background:"var(--b0)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>💵</div><div><h3 style={{fontWeight:800,fontSize:18,color:"var(--navy)"}}>Pago en Efectivo / Cheque</h3><p style={{fontSize:13,color:"var(--g5)"}}>Coordina tu pago con nuestro equipo</p></div></div>
+          <button onClick={()=>setCashModal(false)} style={{background:"var(--g1)",border:"none",borderRadius:8,padding:8,cursor:"pointer"}}><X n="x" s={18}/></button>
+        </div>
+        <div style={{padding:16,background:"var(--b0)",borderRadius:14,marginBottom:16}}>
+          <p style={{fontSize:12,color:"var(--b6)",fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Llámanos / escríbenos</p>
+          <a href={`tel:${SUPPORT.phone.replace(/\s/g,"")}`} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",textDecoration:"none",color:"var(--navy)",fontWeight:700,fontSize:18}}><X n="phone" s={18} c="var(--b6)"/>{SUPPORT.phone}</a>
+          <a href={`tel:${SUPPORT.altPhone.replace(/[^0-9+]/g,"")}`} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",textDecoration:"none",color:"var(--g7)",fontWeight:600,fontSize:14}}><X n="phone" s={16} c="var(--g5)"/>Soporte: {SUPPORT.altPhone}</a>
+          <a href={`mailto:${SUPPORT.email}`} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",textDecoration:"none",color:"var(--g7)",fontWeight:600,fontSize:14}}><X n="mail" s={16} c="var(--g5)"/>{SUPPORT.email}</a>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8,padding:12,background:"var(--g0)",borderRadius:10,marginBottom:18}}>
+          <X n="map" s={16} c="var(--b5)"/><span style={{fontSize:13,color:"var(--g7)"}}>9807 Mines Rd – Suite #9, Laredo TX 78045 · Lun–Vie 7AM–6PM</span>
+        </div>
+        <p style={{fontSize:12,color:"var(--g5)",marginBottom:16}}>Al continuar se genera tu pedido en estado <strong>Pendiente</strong>. El administrador lo aprueba al recibir el pago en oficina; entonces recibirás tu contrato por correo.</p>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={()=>setCashModal(false)} className="btn bs" style={{flex:1,justifyContent:"center"}}>Cerrar</button>
+          <button onClick={()=>{setCashModal(false);doConfirm()}} className="btn bp" style={{flex:1,justifyContent:"center"}}>Generar pedido</button>
+        </div>
       </div>
     </div>}
   </div></div>;
@@ -3894,11 +4382,11 @@ function Fo({t,sv}){const [em,sem]=useState("");const [sent,ss]=useState(false);
 }
 
 /* ═══════ ADMIN ═══════ */
-function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,setMessages,deliveries,setDeliveries,bookings,setBookings,orders,setOrders,logout,alarmEnabled,setAlarmEnabled,alarmActive,setAlarmActive,emailTemplate,setEmailTemplate,emailLog,sendConfirmationEmail,renderEmailVars}){
+function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,setMessages,deliveries,setDeliveries,bookings,setBookings,orders,setOrders,logout,alarmEnabled,setAlarmEnabled,alarmActive,setAlarmActive,emailTemplate,setEmailTemplate,emailLog,sendConfirmationEmail,renderEmailVars,carts,setCarts,contracts,setContracts,contractTpl,setContractTpl,creditLines,setCreditLines,approveOrder,rejectOrder}){
   const [section,setSection]=useState("dash");
-  /* Clear alarm when admin opens the reservations or spaces section (where the new order is visible) */
+  /* Clear alarm when admin opens a section where the new order is visible */
   useEffect(()=>{
-    if(alarmActive&&(section==="reservations"||section==="spaces")&&setAlarmActive)setAlarmActive(false);
+    if(alarmActive&&(section==="reservations"||section==="spaces"||section==="orderspay")&&setAlarmActive)setAlarmActive(false);
   },[section,alarmActive]);
   const [fleet,setFleetLocal]=useState(admSeedFleet);
   const setFleet=(updater)=>{
@@ -4014,6 +4502,10 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
           {section==="reservations"&&<ReservationsMod orders={orders} setOrders={setOrders} fleetBookings={bookings} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars}/>}
           {section==="settlement"&&<SettlementMod orders={orders} setOrders={setOrders} deliveries={deliveries} fleet={fleet}/>}
           {section==="contacts"&&<ContactsMod contacts={contacts} setContacts={setContacts} orders={orders}/>}
+          {section==="carts"&&<CartsMod carts={carts} setCarts={setCarts}/>}
+          {section==="orderspay"&&<OrdersPayMod orders={orders} setOrders={setOrders} approveOrder={approveOrder} rejectOrder={rejectOrder}/>}
+          {section==="credit"&&<CreditMod creditLines={creditLines} setCreditLines={setCreditLines} orders={orders}/>}
+          {section==="contracts"&&<ContractsMod contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl}/>}
           {section==="posts"&&<PostsMod/>}
           {section==="messages"&&<MessagesMod messages={messages} setMessages={setMessages}/>}
           {section==="pay"&&<PayMod/>}
