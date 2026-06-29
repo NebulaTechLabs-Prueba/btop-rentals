@@ -3342,7 +3342,7 @@ function ContractsMod({contracts,setContracts,contractTpl,setContractTpl,signatu
         <div className="p-5"><div className="font-bold text-blue-900 mb-3">{view.title}</div><pre className="whitespace-pre-wrap text-xs leading-relaxed text-stone-700">{view.body}</pre>
           {/* SIGNATURES */}
           <div className="grid grid-cols-2 gap-4 mt-5 pt-4 border-t">
-            <div><div className="text-[10px] uppercase font-semibold text-stone-400 mb-1">Lessor — {company.name||"BTOP Rentals"}</div>{lr?.dataUrl?<><img src={lr.dataUrl} alt="rep signature" style={{height:48,maxWidth:"100%",objectFit:"contain"}}/><div className="text-[10px] text-stone-500 mt-1">{lr.name||"Authorized Representative"} · {fmtDateTime(lr.signedAt)}</div></>:<button onClick={()=>{company.repSignature?signAsBtop(view,company.repSignature):setRepSigModal(true)}} className="px-3 py-1.5 bg-blue-900 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5"><Pencil className="w-3 h-3"/>Sign as BTOP</button>}</div>
+            <div><div className="text-[10px] uppercase font-semibold text-stone-400 mb-1">Lessor — {company.name||"BTOP Rentals"}</div>{lr?.dataUrl?<><img src={lr.dataUrl} alt="rep signature" style={{height:48,maxWidth:"100%",objectFit:"contain"}}/><div className="text-[10px] text-stone-500 mt-1">{lr.name||"Authorized Representative"} · {fmtDateTime(lr.signedAt)}</div></>:<><button onClick={()=>{company.repSignature?signAsBtop(view,company.repSignature):setRepSigModal(true)}} className="px-3 py-1.5 bg-blue-900 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5"><Pencil className="w-3 h-3"/>{company.repSignature?"Sign as BTOP":"Set up signature & sign"}</button>{!company.repSignature&&<div className="text-[10px] text-amber-600 mt-1">No representative signature configured yet — you'll set one up.</div>}</>}</div>
             <div><div className="text-[10px] uppercase font-semibold text-stone-400 mb-1">Lessee — {view.client}</div>{ls?.dataUrl?<><img src={ls.dataUrl} alt="client signature" style={{height:48,maxWidth:"100%",objectFit:"contain"}}/><div className="text-[10px] text-stone-500 mt-1">Signed {fmtDateTime(ls.signedAt)}</div></>:<div className="text-xs text-stone-400 italic">Not signed — client signs at checkout</div>}</div>
           </div>
           <div className="text-[10px] text-stone-400 mt-4 border-t pt-3">{view.footer}</div>
@@ -4686,17 +4686,21 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},cred
         <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:"rgba(255,255,255,.5)"}}><span>Rental estimate</span><span>{$(totalRental)}</span></div><div style={{borderTop:"1px solid rgba(255,255,255,.2)",paddingTop:12,marginTop:8,display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:800,fontSize:20}}>Deposit (Pay Now)</span><span style={{fontFamily:"var(--fm)",fontWeight:800,fontSize:24}}>{$(totalDep)}</span></div>
       </div>
 
-      {/* SIGN RENTAL AGREEMENT — make the client aware their signature will be applied */}
+      {/* SIGN RENTAL AGREEMENT — client signs intentionally; if no signature is configured, capture one now and proceed */}
       <div className="cd" style={{padding:20,marginBottom:24,border:agreeSign?"2px solid var(--green)":"2px solid var(--b1)"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}><div style={{width:38,height:38,borderRadius:10,background:"var(--b0)",display:"flex",alignItems:"center",justifyContent:"center"}}><X n="edit" s={18} c="var(--b6)"/></div><div><h3 style={{fontWeight:800,fontSize:15,color:"var(--navy)"}}>Sign rental agreement</h3><p style={{fontSize:12,color:"var(--g5)"}}>Your electronic signature is applied to the rental agreement for this order.</p></div></div>
-        {mySignature?.dataUrl?<div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
-          <div style={{width:180,height:64,border:"1px solid var(--g2)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",background:"#fff"}}><img src={mySignature.dataUrl} alt="signature" style={{maxHeight:52,maxWidth:165,objectFit:"contain"}}/></div>
-          <button onClick={()=>setSigModal(true)} style={{background:"none",border:"none",color:"var(--b6)",cursor:"pointer",fontWeight:600,fontSize:13}}>Change signature</button>
-        </div>:<button onClick={()=>setSigModal(true)} className="btn bp bsm"><X n="edit" s={14}/>Add your signature</button>}
-        <label style={{display:"flex",alignItems:"flex-start",gap:10,marginTop:14,padding:12,borderRadius:10,cursor:mySignature?.dataUrl?"pointer":"not-allowed",background:agreeSign?"#D1FAE5":"var(--g0)",border:agreeSign?"2px solid var(--green)":"2px solid var(--g2)",opacity:mySignature?.dataUrl?1:.6}}>
-          <input type="checkbox" disabled={!mySignature?.dataUrl} checked={agreeSign} onChange={e=>setAgreeSign(e.target.checked)} style={{width:18,height:18,marginTop:1,accentColor:"var(--green)"}}/>
-          <span style={{fontSize:12,color:"var(--g7)",lineHeight:1.5}}>I authorize BTOP to affix my electronic signature to the rental agreement for this order, and agree it is the legal equivalent of my handwritten signature (U.S. ESIGN Act &amp; UETA).</span>
-        </label>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}><div style={{width:38,height:38,borderRadius:10,background:agreeSign?"#D1FAE5":"var(--b0)",display:"flex",alignItems:"center",justifyContent:"center"}}><X n={agreeSign?"ok":"edit"} s={18} c={agreeSign?"var(--green)":"var(--b6)"}/></div><div><h3 style={{fontWeight:800,fontSize:15,color:"var(--navy)"}}>{agreeSign?"Rental agreement signed":"Sign rental agreement"}</h3><p style={{fontSize:12,color:"var(--g5)"}}>{agreeSign?"Your signature will be affixed to this order's agreement.":"Your electronic signature will be applied to the rental agreement for this order."}</p></div></div>
+        {agreeSign?<div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+          {mySignature?.dataUrl&&<div style={{width:180,height:60,border:"1px solid var(--g2)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",background:"#fff"}}><img src={mySignature.dataUrl} alt="signature" style={{maxHeight:48,maxWidth:165,objectFit:"contain"}}/></div>}
+          <button onClick={()=>setAgreeSign(false)} style={{background:"none",border:"none",color:"var(--b6)",cursor:"pointer",fontWeight:600,fontSize:13}}>Re-sign / change</button>
+        </div>:<div>
+          {mySignature?.dataUrl&&<div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}><div style={{width:160,height:54,border:"1px solid var(--g2)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",background:"#fff"}}><img src={mySignature.dataUrl} alt="signature" style={{maxHeight:44,maxWidth:146,objectFit:"contain"}}/></div><span style={{fontSize:12,color:"var(--g5)"}}>Your saved signature</span></div>}
+          {!mySignature?.dataUrl&&<p style={{fontSize:12,color:"var(--orange)",fontWeight:600,marginBottom:10}}>You don't have a signature yet — set one up now to continue.</p>}
+          <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+            <button onClick={()=>{if(mySignature?.dataUrl)setAgreeSign(true);else setSigModal(true)}} className="btn bp"><X n="edit" s={16}/>{mySignature?.dataUrl?"Sign rental agreement":"Set up signature & sign"}</button>
+            {mySignature?.dataUrl&&<button onClick={()=>setSigModal(true)} className="btn bs">Use a different signature</button>}
+          </div>
+          <p style={{fontSize:11,color:"var(--g5)",marginTop:10,lineHeight:1.5}}>By signing you agree your electronic signature is the legal equivalent of your handwritten signature (U.S. ESIGN Act &amp; UETA).</p>
+        </div>}
       </div>
 
       <div style={{display:"flex",gap:12}}>
@@ -4705,7 +4709,7 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},cred
       </div>
     </div>}
 
-    {sigModal&&<SignaturePad title="Your signature" onClose={()=>setSigModal(false)} onSave={(d)=>{saveMySignature&&saveMySignature(d);setSigModal(false)}}/>}
+    {sigModal&&<SignaturePad title="Your signature" onClose={()=>setSigModal(false)} onSave={(d)=>{saveMySignature&&saveMySignature(d);setAgreeSign(true);setSigModal(false)}}/>}
 
     {/* CASH / CHEQUE — CONTACT MODAL */}
     {cashModal&&<div style={{position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.45)",padding:16}} onClick={()=>setCashModal(false)}>
