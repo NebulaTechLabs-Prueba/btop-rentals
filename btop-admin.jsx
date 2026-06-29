@@ -4911,13 +4911,11 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
       {drawerOpen&&<div className="admin-backdrop" onClick={()=>setDrawerOpen(false)}/>}
       {/* SIDEBAR */}
       <aside className={`admin-sidebar${drawerOpen?" open":""}`} style={{width:256,background:"#fff",borderRight:"1px solid #e7e5e4",display:"flex",flexDirection:"column",flexShrink:0,height:"100vh",overflow:"hidden"}}>
-        <div style={{padding:"20px",borderBottom:"1px solid #e7e5e4",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div style={{background:"#1e3a5f",borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <img src={import.meta.env.BASE_URL+"btop-logo.svg"} alt="BTOP Rentals" style={{height:24,display:"block",margin:"0 auto"}} onError={e=>{e.currentTarget.outerHTML="<span style='color:#fff;font-weight:700;font-size:15px'>BTOP</span>"}}/>
-            </div>
+        <div style={{position:"relative",padding:"20px",borderBottom:"1px solid #e7e5e4",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{background:"#1e3a5f",borderRadius:10,padding:"11px 16px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <img src={import.meta.env.BASE_URL+"btop-logo.svg"} alt="BTOP Rentals" style={{height:28,display:"block"}} onError={e=>{e.currentTarget.outerHTML="<span style='color:#fff;font-weight:700;font-size:16px'>BTOP</span>"}}/>
           </div>
-          <button onClick={()=>setDrawerOpen(false)} className="admin-topbar-burger" style={{display:"none",background:"transparent",border:"none",cursor:"pointer",padding:4,color:"#78716c"}}>✕</button>
+          <button onClick={()=>setDrawerOpen(false)} className="admin-topbar-burger" style={{display:"none",position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",padding:4,color:"#78716c"}}>✕</button>
         </div>
         <nav style={{flex:1,overflowY:"auto",padding:"16px 12px"}}>
           {Object.entries(grouped).map(([group,items])=>(
