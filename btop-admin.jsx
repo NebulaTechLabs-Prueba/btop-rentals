@@ -1,4 +1,5 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect, useRef, createContext, useContext } from "react";
+import { jsPDF } from "jspdf";
 import {
   Plus, Search, Pencil, Trash2, Eye, EyeOff, X as Xx, Check, MapPin, Star, Clock, Users,
   LayoutDashboard, CreditCard, UserCog, Settings, Bell, ChevronDown, ChevronRight,
@@ -2471,6 +2472,7 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
   const [gwEdit,setGwEdit]=useState(null);
   const [editHours,setEditHours]=useState(false);
   const [editCompany,setEditCompany]=useState(false);
+  const [repSigOpen,setRepSigOpen]=useState(false);
   const gw=gateways;const sg=setGateways;
   const uGw=(key,field,val)=>sg(p=>({...p,[key]:{...p[key],[field]:val}}));
   /* Test-beep helper so the admin can preview the sound when enabling */
@@ -2514,10 +2516,19 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
           <F label="Address"><Inp value={company.address} onChange={v=>setCompany(p=>({...p,address:v}))}/></F>
           <div className="grid grid-cols-2 gap-4"><F label="Phone"><Inp value={company.phone} onChange={v=>setCompany(p=>({...p,phone:v}))}/></F><F label="Email"><Inp value={company.email} onChange={v=>setCompany(p=>({...p,email:v}))} type="email"/></F></div>
           <F label="Hours (short)"><Inp value={company.hours} onChange={v=>setCompany(p=>({...p,hours:v}))}/></F>
-          <p className="text-xs text-stone-500">These details feed the website footer, contact page, checkout (cash/Zelle), emails and rental contracts.</p>
+          <F label="Authorized Representative (name on contracts)"><Inp value={company.repName||""} onChange={v=>setCompany(p=>({...p,repName:v}))} placeholder="e.g. John Doe, Operations Manager"/></F>
+          <div>
+            <label className="block text-xs font-medium text-stone-600 mb-1.5">Representative Signature (Lessor — applied to every contract)</label>
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="w-48 h-20 border-2 border-dashed border-stone-300 rounded-xl flex items-center justify-center bg-white">{company.repSignature?<img src={company.repSignature} alt="rep signature" className="max-h-16 max-w-44 object-contain"/>:<span className="text-xs text-stone-400">No signature</span>}</div>
+              <div className="flex gap-2"><button onClick={()=>setRepSigOpen(true)} className="px-3 py-2 bg-blue-900 text-white rounded-lg text-xs font-semibold">{company.repSignature?"Update":"Add"} signature</button>{company.repSignature&&<button onClick={()=>setCompany(p=>({...p,repSignature:""}))} className="px-3 py-2 border border-stone-200 rounded-lg text-xs font-semibold text-stone-600">Remove</button>}</div>
+            </div>
+          </div>
+          <p className="text-xs text-stone-500">These details feed the website footer, contact page, checkout (cash/Zelle), emails and rental contracts (incl. the Lessor signature).</p>
           <button onClick={()=>setEditCompany(false)} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-900 text-white rounded-full text-sm"><Check className="w-3.5 h-3.5"/>Save Changes</button>
-        </div>:<div className="space-y-3">{[["Company",company.name],["Address",company.address],["Phone",company.phone],["Email",company.email],["Hours",company.hours]].map(([l,v])=>(<div key={l} className="flex justify-between py-2 border-b border-stone-100 last:border-0 text-sm"><span className="text-stone-500">{l}</span><span className="font-medium">{v}</span></div>))}</div>}
+        </div>:<div className="space-y-3">{[["Company",company.name],["Address",company.address],["Phone",company.phone],["Email",company.email],["Hours",company.hours],["Representative",company.repName||"—"]].map(([l,v])=>(<div key={l} className="flex justify-between py-2 border-b border-stone-100 last:border-0 text-sm"><span className="text-stone-500">{l}</span><span className="font-medium">{v}</span></div>))}<div className="flex justify-between py-2 text-sm"><span className="text-stone-500">Rep. signature</span>{company.repSignature?<img src={company.repSignature} alt="sig" className="max-h-8 object-contain"/>:<span className="text-stone-400">Not set</span>}</div></div>}
       </SC>
+      {repSigOpen&&<SignaturePad title="BTOP representative signature" onClose={()=>setRepSigOpen(false)} onSave={(d)=>{setCompany(p=>({...p,repSignature:d}));setRepSigOpen(false)}}/>}
 
       {/* HOURS */}
       <SC title="Business Hours" action={<button onClick={()=>setEditHours(!editHours)} className="text-xs text-blue-700 font-medium">{editHours?"Done":"Edit"}</button>}>
@@ -2879,6 +2890,86 @@ function downloadDoc(doc){
   }catch(e){}
 }
 
+/* ─── SIGNATURE PAD — sign by DRAWING, TYPING, or UPLOADING an image (desktop + mobile). No third-party API. ─── */
+function SignaturePad({onSave,onClose,title="Add your signature"}){
+  const ref=useRef(null);
+  const st=useRef({on:false,last:null});
+  const [mode,setMode]=useState("draw"); /* draw | type | upload */
+  const [dirty,setDirty]=useState(false);
+  const [typed,setTyped]=useState("");
+  const [uploaded,setUploaded]=useState("");
+  useEffect(()=>{if(mode!=="draw")return;const c=ref.current;if(!c)return;const ctx=c.getContext("2d");ctx.lineWidth=2.5;ctx.lineCap="round";ctx.lineJoin="round";ctx.strokeStyle="#0a1628";},[mode]);
+  const pt=(e)=>{const c=ref.current,r=c.getBoundingClientRect(),t=e.touches?e.touches[0]:e;return{x:(t.clientX-r.left)*(c.width/r.width),y:(t.clientY-r.top)*(c.height/r.height)}};
+  const down=(e)=>{e.preventDefault();st.current.on=true;st.current.last=pt(e)};
+  const moveP=(e)=>{if(!st.current.on)return;e.preventDefault();const c=ref.current,ctx=c.getContext("2d"),p=pt(e);ctx.beginPath();ctx.moveTo(st.current.last.x,st.current.last.y);ctx.lineTo(p.x,p.y);ctx.stroke();st.current.last=p;if(!dirty)setDirty(true)};
+  const up=()=>{st.current.on=false};
+  const clearDraw=()=>{const c=ref.current;if(c)c.getContext("2d").clearRect(0,0,c.width,c.height);setDirty(false)};
+  const onUpload=(e)=>{const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>setUploaded(r.result);r.readAsDataURL(f)};
+  const typedToImage=()=>{const cv=document.createElement("canvas");cv.width=920;cv.height=300;const ctx=cv.getContext("2d");ctx.fillStyle="#0a1628";ctx.textAlign="center";ctx.textBaseline="middle";ctx.font="120px 'Brush Script MT','Segoe Script',cursive";ctx.fillText(typed.trim(),460,150);return cv.toDataURL("image/png")};
+  const canSave=mode==="draw"?dirty:mode==="type"?!!typed.trim():!!uploaded;
+  const save=()=>{if(!canSave)return;onSave(mode==="draw"?ref.current.toDataURL("image/png"):mode==="type"?typedToImage():uploaded)};
+  const Tab=({m,l})=><button onClick={()=>setMode(m)} className="btn bsm" style={{flex:1,justifyContent:"center",background:mode===m?"var(--b6)":"#fff",color:mode===m?"#fff":"var(--g7)",border:mode===m?"none":"1px solid var(--g3)"}}>{l}</button>;
+  return <div style={{position:"fixed",inset:0,zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.5)",padding:16}} onClick={onClose}>
+    <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,padding:24,width:"100%",maxWidth:520}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><h3 style={{fontWeight:800,fontSize:18,color:"var(--navy)"}}>{title}</h3><button onClick={onClose} style={{background:"var(--g1)",border:"none",borderRadius:8,padding:8,cursor:"pointer"}}><X n="x" s={18}/></button></div>
+      <div style={{display:"flex",gap:8,marginBottom:14}}><Tab m="draw" l="✍️ Draw"/><Tab m="type" l="⌨️ Type"/><Tab m="upload" l="📷 Upload"/></div>
+      {mode==="draw"&&<><p style={{fontSize:12,color:"var(--g5)",marginBottom:8}}>Sign by hand with mouse or touch.</p>
+        <canvas ref={ref} width={920} height={300} onMouseDown={down} onMouseMove={moveP} onMouseUp={up} onMouseLeave={up} onTouchStart={down} onTouchMove={moveP} onTouchEnd={up} style={{width:"100%",height:200,border:"2px dashed var(--g3)",borderRadius:12,background:"#fff",touchAction:"none",cursor:"crosshair"}}/></>}
+      {mode==="type"&&<><p style={{fontSize:12,color:"var(--g5)",marginBottom:8}}>Type your name; it becomes your signature.</p>
+        <input className="inf" value={typed} onChange={e=>setTyped(e.target.value)} placeholder="Your full name" style={{fontSize:16}}/>
+        <div style={{height:120,border:"2px dashed var(--g3)",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",marginTop:10,fontFamily:"'Brush Script MT','Segoe Script',cursive",fontSize:46,color:"var(--navy)"}}>{typed.trim()||"Preview"}</div></>}
+      {mode==="upload"&&<><p style={{fontSize:12,color:"var(--g5)",marginBottom:8}}>Upload a photo/scan of your signature (PNG/JPG).</p>
+        <input type="file" accept="image/*" onChange={onUpload} style={{fontSize:13}}/>
+        {uploaded&&<div style={{height:140,border:"2px dashed var(--g3)",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",marginTop:10,padding:8}}><img src={uploaded} alt="signature" style={{maxHeight:120,maxWidth:"100%",objectFit:"contain"}}/></div>}</>}
+      <div style={{display:"flex",gap:10,marginTop:14}}>
+        {mode==="draw"&&<button onClick={clearDraw} className="btn bs" style={{flex:1,justifyContent:"center"}}>Clear</button>}
+        <button onClick={save} disabled={!canSave} className="btn bp" style={{flex:2,justifyContent:"center",opacity:canSave?1:.5}}><X n="ok" s={16}/>Save signature</button>
+      </div>
+    </div>
+  </div>;
+}
+
+/* ─── Generate the rental contract as a real PDF with both hand-drawn signatures embedded ─── */
+function generateSignedPdf(c,{clientSig,repSig,repName,company={}}={}){
+  const doc=new jsPDF({unit:"pt",format:"letter"});
+  const PW=612,M=56,W=PW-M*2;let y=60;
+  const head=()=>{doc.setFont("times","bold");doc.setTextColor(30,58,95);doc.setFontSize(15);doc.text((company.name||"BTOP RENTALS").toUpperCase(),PW/2,y,{align:"center"});y+=20;
+    doc.setFontSize(13);doc.text(c.title||"EQUIPMENT RENTAL AGREEMENT",PW/2,y,{align:"center"});y+=14;
+    doc.setFont("helvetica","normal");doc.setFontSize(8.5);doc.setTextColor(120);doc.text(`Agreement No. ${c.contractNum||"—"}   ·   Order ${c.oid||"—"}`,PW/2,y,{align:"center"});y+=14;
+    doc.setDrawColor(210);doc.line(M,y,PW-M,y);y+=16;};
+  head();
+  doc.setFont("times","normal");doc.setFontSize(10);doc.setTextColor(25);
+  const lines=doc.splitTextToSize(c.body||"",W);
+  for(const ln of lines){if(y>742){doc.addPage();y=56;}doc.text(ln,M,y);y+=13.5;}
+  /* Signature block (keep on one page) */
+  if(y>610){doc.addPage();y=70;}else{y+=24;}
+  const colW=(W-40)/2,imgY=y,lineY=y+62;
+  const place=(img,x)=>{if(img){try{doc.addImage(img,"PNG",x,imgY,colW,56);}catch(e){}}};
+  place(repSig,M);place(clientSig,M+colW+40);
+  doc.setDrawColor(90);doc.line(M,lineY,M+colW,lineY);doc.line(M+colW+40,lineY,M+colW+40+colW,lineY);
+  doc.setFont("helvetica","bold");doc.setFontSize(9);doc.setTextColor(20);
+  doc.text(`${company.name||"BTOP Rentals"} — Lessor`,M,lineY+14);
+  doc.text(`${c.client||"Client"} — Lessee`,M+colW+40,lineY+14);
+  doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(110);
+  doc.text(repSig?`Signed by ${repName||"Authorized Representative"}`:"Pending signature",M,lineY+26);
+  doc.text(clientSig?`Signed by ${c.client||"Client"}`:"Pending signature",M+colW+40,lineY+26);
+  /* AUDIT TRAIL — evidence for electronic-signature validity (US ESIGN/UETA, MX, EU eIDAS simple e-signature) */
+  let fp=5381;const src=(c.body||"")+(c.contractNum||"")+(c.email||"");for(let i=0;i<src.length;i++){fp=((fp<<5)+fp+src.charCodeAt(i))>>>0;}
+  const now=new Date();
+  const audit=[
+    `AUDIT TRAIL — Agreement ${c.contractNum||""} · Order ${c.oid||""}`,
+    `Lessee: ${c.client||""} (${c.email||""})   ·   Lessor representative: ${repName||"BTOP Rentals"}`,
+    `Generated: ${now.toLocaleString("en-US")} (${Intl.DateTimeFormat().resolvedOptions().timeZone||"local"})   ·   Document fingerprint: ${fp.toString(16).toUpperCase()}`,
+    `Consent: parties agreed to sign electronically by hand within the BTOP platform. Electronic signature per US ESIGN Act / UETA, Mexico, and EU eIDAS (simple electronic signature).`,
+  ];
+  doc.setDrawColor(225);doc.line(M,lineY+38,PW-M,lineY+38);
+  doc.setFontSize(7);doc.setTextColor(130);
+  audit.forEach((ln,i)=>doc.text(ln,M,lineY+50+i*10,{maxWidth:W}));
+  doc.setFontSize(7.5);doc.setTextColor(150);
+  doc.text(c.footer||"",PW/2,782,{align:"center",maxWidth:W});
+  doc.save(`${c.contractNum||"agreement"}.pdf`);
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
    PAYMENTS ADAPTER — single seam to swap the simulated flow for real Stripe.
    DEMO (STRIPE_LIVE=false): resolves after a short delay; no network, no keys.
@@ -3166,11 +3257,16 @@ function CreditMod({creditLines,setCreditLines,orders,contacts=[]}){
 }
 
 /* ═══ ADMIN · RENTAL CONTRACTS (auto-generated when the admin approves payment) ═══ */
-function ContractsMod({contracts,setContracts,contractTpl,setContractTpl}){
+function ContractsMod({contracts,setContracts,contractTpl,setContractTpl,signaturesAll={},company={}}){
   const [tab,setTab]=useState("list");
   const [draft,setDraft]=useState(contractTpl);
   const [view,setView]=useState(null);
   const [q,setQ]=useState("");
+  /* A contract is "signed" when both parties have a signature on file: lessee = client's saved sig, lessor = company rep sig */
+  const sigFor=(c)=>signaturesAll[c.email];
+  const repSig=company.repSignature;
+  const signState=(c)=>{const l=!!sigFor(c),r=!!repSig;return l&&r?"both":l||r?"partial":"none"};
+  const downloadSigned=(c)=>generateSignedPdf(c,{clientSig:sigFor(c)?.dataUrl,repSig:repSig,repName:company.repName,company});
   const [from,setFrom]=useState("");
   const [to,setTo]=useState("");
   const ql=q.trim().toLowerCase();
@@ -3204,14 +3300,14 @@ function ContractsMod({contracts,setContracts,contractTpl,setContractTpl}){
     </div>
     <SC title={`Contracts (${filtered.length})`} padded={false}>
       {filtered.length===0?<div className="text-center py-16 text-stone-400"><FileText className="w-8 h-8 mx-auto mb-2"/><p>{contracts.length===0?"No contracts yet. They are issued when a payment is approved.":"No contracts match your search."}</p></div>
-      :<DT headers={["Agreement No.","Order","Client","Issued","Status",""]} rows={filtered.map(c=>[
+      :<DT headers={["Agreement No.","Order","Client","Issued","Signature",""]} rows={filtered.map(c=>{const ss=signState(c);return [
         <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded">{c.contractNum}</span>,
         <span className="font-mono text-xs">{c.oid}</span>,
         <div><div className="font-semibold text-sm">{c.client}</div><div className="text-[10px] text-stone-400">{c.email}</div></div>,
         <span className="text-xs text-stone-500">{fmtDateTime(c.createdAt)}</span>,
-        <Pill tone="blue">📧 Emailed</Pill>,
-        <div className="flex gap-1"><button onClick={()=>setView(c)} className="p-1.5 hover:bg-stone-100 rounded-lg"><Eye className="w-3.5 h-3.5"/></button><button onClick={()=>printContract(c)} className="p-1.5 hover:bg-blue-50 text-blue-700 rounded-lg" title="Save as PDF"><Download className="w-3.5 h-3.5"/></button></div>,
-      ])}/>}
+        <Pill tone={ss==="both"?"emerald":ss==="partial"?"amber":"stone"}>{ss==="both"?"✓ Signed":ss==="partial"?"Partially signed":"Not signed"}</Pill>,
+        <div className="flex gap-1"><button onClick={()=>setView(c)} className="p-1.5 hover:bg-stone-100 rounded-lg" title="Review"><Eye className="w-3.5 h-3.5"/></button><button onClick={()=>downloadSigned(c)} className="p-1.5 hover:bg-blue-50 text-blue-700 rounded-lg" title="Download signed PDF"><Download className="w-3.5 h-3.5"/></button></div>,
+      ]})}/>}
     </SC></>}
     {tab==="tpl"&&<div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <SC title="Template editor">
@@ -3230,12 +3326,19 @@ function ContractsMod({contracts,setContracts,contractTpl,setContractTpl}){
         {(()=>{const sample={oid:"ORD-DEMO12",un:"Sample Client",ue:"client@sample.com",bPhone:"(469) 555-0000",sd:"2026-07-01",ed:"2026-07-08",days:7,payMethod:"Stripe (card)",approvedAt:nowISO(),items:[{name:"Freightliner Cascadia",cat:"Daycab",days:7,qty:1,rate:1155,deposit:500}]};const r=renderContract(draft,sample);return <div><div className="font-bold text-sm text-blue-900 mb-2">{r.title}</div><pre className="whitespace-pre-wrap text-[11px] leading-relaxed text-stone-700 bg-stone-50 p-3 rounded-lg max-h-[420px] overflow-auto">{r.body}</pre><div className="text-[10px] text-stone-400 mt-2">{r.footer}</div></div>})()}
       </SC>
     </div>}
-    {view&&<div style={{position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.4)",padding:16}} onClick={()=>setView(null)}>
+    {view&&(()=>{const ls=sigFor(view);const ss=signState(view);return <div style={{position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.4)",padding:16}} onClick={()=>setView(null)}>
       <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white"><span className="font-mono font-bold text-blue-700">{view.contractNum}</span><div className="flex gap-2"><button onClick={()=>printContract(view)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1"><Download className="w-3.5 h-3.5"/>Save as PDF</button><button onClick={()=>setView(null)} className="p-1.5 hover:bg-stone-100 rounded-full"><Xx className="w-4 h-4"/></button></div></div>
-        <div className="p-5"><div className="font-bold text-blue-900 mb-3">{view.title}</div><pre className="whitespace-pre-wrap text-xs leading-relaxed text-stone-700">{view.body}</pre><div className="text-[10px] text-stone-400 mt-4 border-t pt-3">{view.footer}</div></div>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white"><div className="flex items-center gap-2"><span className="font-mono font-bold text-blue-700">{view.contractNum}</span><Pill tone={ss==="both"?"emerald":ss==="partial"?"amber":"stone"}>{ss==="both"?"✓ Signed":ss==="partial"?"Partially signed":"Not signed"}</Pill></div><div className="flex gap-2"><button onClick={()=>downloadSigned(view)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1"><Download className="w-3.5 h-3.5"/>Download signed PDF</button><button onClick={()=>setView(null)} className="p-1.5 hover:bg-stone-100 rounded-full"><Xx className="w-4 h-4"/></button></div></div>
+        <div className="p-5"><div className="font-bold text-blue-900 mb-3">{view.title}</div><pre className="whitespace-pre-wrap text-xs leading-relaxed text-stone-700">{view.body}</pre>
+          {/* SIGNATURES */}
+          <div className="grid grid-cols-2 gap-4 mt-5 pt-4 border-t">
+            <div><div className="text-[10px] uppercase font-semibold text-stone-400 mb-1">Lessor — {company.name||"BTOP Rentals"}</div>{repSig?<img src={repSig} alt="rep signature" style={{height:48,maxWidth:"100%",objectFit:"contain"}}/>:<div className="text-xs text-stone-400 italic">Not signed — set in Settings → Company</div>}{repSig&&<div className="text-[10px] text-stone-500 mt-1">{company.repName||"Authorized Representative"}</div>}</div>
+            <div><div className="text-[10px] uppercase font-semibold text-stone-400 mb-1">Lessee — {view.client}</div>{ls?.dataUrl?<img src={ls.dataUrl} alt="client signature" style={{height:48,maxWidth:"100%",objectFit:"contain"}}/>:<div className="text-xs text-stone-400 italic">Not signed — client signs in their portal</div>}{ls?.savedAt&&<div className="text-[10px] text-stone-500 mt-1">Signed {fmtDateTime(ls.savedAt)}</div>}</div>
+          </div>
+          <div className="text-[10px] text-stone-400 mt-4 border-t pt-3">{view.footer}</div>
+        </div>
       </div>
-    </div>}
+    </div>})()}
   </div>;
 }
 
@@ -3347,6 +3450,10 @@ export default function App(){
   const clientDocs=user?(clientDocsAll[user.email]||[]):[];
   const addClientDoc=(doc)=>{if(!user)return;setClientDocsAll(prev=>({...prev,[user.email]:[...(prev[user.email]||[]),doc]}))};
   const removeClientDoc=(id)=>{if(!user)return;setClientDocsAll(prev=>({...prev,[user.email]:(prev[user.email]||[]).filter(d=>d.id!==id)}))};
+  /* Per-user hand-drawn signatures (each user saves one; replicated onto their contracts) — keyed by email */
+  const [signaturesAll,setSignaturesAll]=usePersistentState("btop_signatures",{});
+  const mySignature=user?signaturesAll[user.email]:null;
+  const saveMySignature=(dataUrl)=>{if(!user)return;setSignaturesAll(prev=>({...prev,[user.email]:{dataUrl,name:user.name,savedAt:nowISO()}}))};
   /* Client's preferred deposit-return method (visible to admin; final method may still be agreed at return time) */
   const [depositReturnAll,setDepositReturnAll]=usePersistentState("btop_depositReturn",{});
   const depositReturnPref=user?(depositReturnAll[user.email]||{method:"bank",bankName:"",routingNumber:"",accountNumber:"",zelleEmail:""}):null;
@@ -3611,10 +3718,10 @@ body{font-family:var(--f);background:var(--g0);color:var(--g9)}input,select,text
       {view==="register"&&<Re dr={doReg} sv={setView}/>}
       {view==="forgot"&&<Fo t={t} sv={setView}/>}
       {view==="book"&&<Bk fleet={fleet} ac={addCart} sv={setView} t={t} bookings={fleetBookings}/>}
-      {view==="admin"&&user?.role==="admin"&&<Ad fleet={fleet} sf={setFleet} spaces={spaces} setSpaces={setSpaces} contacts={contacts} setContacts={setContacts} orders={orders} setOrders={setOrders} t={t} sv={setView} messages={messages} setMessages={setMessages} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} logout={logout} alarmEnabled={alarmEnabled} setAlarmEnabled={setAlarmEnabled} alarmActive={alarmActive} setAlarmActive={setAlarmActive} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars} carts={carts} setCarts={setCarts} contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl} creditLines={creditLines} setCreditLines={setCreditLines} approveOrder={approveOrder} rejectOrder={rejectOrder} company={company} setCompany={setCompany} clientDocsAll={clientDocsAll} depositReturnAll={depositReturnAll}/>}
+      {view==="admin"&&user?.role==="admin"&&<Ad fleet={fleet} sf={setFleet} spaces={spaces} setSpaces={setSpaces} contacts={contacts} setContacts={setContacts} orders={orders} setOrders={setOrders} t={t} sv={setView} messages={messages} setMessages={setMessages} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} logout={logout} alarmEnabled={alarmEnabled} setAlarmEnabled={setAlarmEnabled} alarmActive={alarmActive} setAlarmActive={setAlarmActive} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars} carts={carts} setCarts={setCarts} contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl} creditLines={creditLines} setCreditLines={setCreditLines} approveOrder={approveOrder} rejectOrder={rejectOrder} company={company} setCompany={setCompany} clientDocsAll={clientDocsAll} depositReturnAll={depositReturnAll} signaturesAll={signaturesAll} saveMySignature={saveMySignature} mySignature={mySignature}/>}
       {view==="hqfield"&&(user?.role==="sede"||user?.role==="admin")&&<FieldHQ fleet={fleet} spaces={spaces} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} user={user} sv={setView} logout={logout}/>}
       {view==="checkout"&&user&&<CheckoutPage cart={cart} rmCart={rmCart} cTotal={cTotal} user={user} confirm={confirmOrder} cancel={()=>setView("home")} sv={setView} company={company} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} creditUsed={orders.filter(o=>(o.payMethod==="credit"||o.payMethod==="invoice")&&o.ue===user.email&&o.status!=="Cancelled"&&!o.settlementPaid).reduce((s,o)=>s+(o.tp||0),0)} savedPays={savedPays}/>}
-      {view==="client"&&user?.role==="client"&&<Cl orders={orders.filter(o=>o.ue===user.email)} sv={setView} user={user} contacts={contacts} setContacts={setContacts} logout={logout} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} orders_all={orders} savedPays={savedPays} setSavedPays={setSavedPays} t={t} clientDocs={clientDocs} addClientDoc={addClientDoc} removeClientDoc={removeClientDoc} depositReturnPref={depositReturnPref} setDepositReturnPref={setDepositReturnPref}/>}
+      {view==="client"&&user?.role==="client"&&<Cl orders={orders.filter(o=>o.ue===user.email)} sv={setView} user={user} contacts={contacts} setContacts={setContacts} logout={logout} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} orders_all={orders} savedPays={savedPays} setSavedPays={setSavedPays} t={t} clientDocs={clientDocs} addClientDoc={addClientDoc} removeClientDoc={removeClientDoc} depositReturnPref={depositReturnPref} setDepositReturnPref={setDepositReturnPref} mySignature={mySignature} saveMySignature={saveMySignature}/>}
     </main>
 
     {/* SLIDE-OUT CART */}
@@ -4646,7 +4753,7 @@ function Fo({t,sv}){const [em,sem]=useState("");const [sent,ss]=useState(false);
 }
 
 /* ═══════ ADMIN ═══════ */
-function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,setMessages,deliveries,setDeliveries,bookings,setBookings,orders,setOrders,logout,alarmEnabled,setAlarmEnabled,alarmActive,setAlarmActive,emailTemplate,setEmailTemplate,emailLog,sendConfirmationEmail,renderEmailVars,carts,setCarts,contracts,setContracts,contractTpl,setContractTpl,creditLines,setCreditLines,approveOrder,rejectOrder,company,setCompany,clientDocsAll,depositReturnAll}){
+function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,setMessages,deliveries,setDeliveries,bookings,setBookings,orders,setOrders,logout,alarmEnabled,setAlarmEnabled,alarmActive,setAlarmActive,emailTemplate,setEmailTemplate,emailLog,sendConfirmationEmail,renderEmailVars,carts,setCarts,contracts,setContracts,contractTpl,setContractTpl,creditLines,setCreditLines,approveOrder,rejectOrder,company,setCompany,clientDocsAll,depositReturnAll,signaturesAll,saveMySignature,mySignature}){
   const [section,setSection]=useState("dash");
   /* Clear alarm when admin opens a section where the new order is visible */
   useEffect(()=>{
@@ -4768,7 +4875,7 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
           {section==="carts"&&<CartsMod carts={carts} setCarts={setCarts} contacts={contacts}/>}
           {section==="orderspay"&&<OrdersPayMod orders={orders} setOrders={setOrders} approveOrder={approveOrder} rejectOrder={rejectOrder}/>}
           {section==="credit"&&<CreditMod creditLines={creditLines} setCreditLines={setCreditLines} orders={orders} contacts={contacts}/>}
-          {section==="contracts"&&<ContractsMod contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl}/>}
+          {section==="contracts"&&<ContractsMod contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl} signaturesAll={signaturesAll} company={company}/>}
           {section==="posts"&&<PostsMod/>}
           {section==="messages"&&<MessagesMod messages={messages} setMessages={setMessages}/>}
           {section==="pay"&&<PayMod/>}
@@ -4793,7 +4900,7 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
   );
 }
 
-function Cl({orders,sv,user,contacts=[],setContacts,logout,creditLine,orders_all=[],savedPays=[],setSavedPays,t,clientDocs=[],addClientDoc,removeClientDoc,depositReturnPref,setDepositReturnPref}){
+function Cl({orders,sv,user,contacts=[],setContacts,logout,creditLine,orders_all=[],savedPays=[],setSavedPays,t,clientDocs=[],addClientDoc,removeClientDoc,depositReturnPref,setDepositReturnPref,mySignature,saveMySignature}){
   const [tab,sTab]=useState("info");
   const [editing,sEditing]=useState(false);
   const [prof,sProf]=useState({
@@ -4813,6 +4920,7 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout,creditLine,orders_all
   const [docs,sDocs]=useState([]);
   const depositReturn=depositReturnPref||{method:"bank",bankName:"",routingNumber:"",accountNumber:"",zelleEmail:""};
   const setDepositReturn=setDepositReturnPref||(()=>{});
+  const [sigOpen,setSigOpen]=useState(false);
   const [pw,sPw]=useState({current:"",newPw:"",confirm:""});
   const [pwMsg,sPwMsg]=useState(null);
   const [delModal,setDelModal]=useState(false);
@@ -5118,6 +5226,18 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout,creditLine,orders_all
       {/* ── SEGURIDAD ── */}
       {tab==="security"&&<div>
         <h2 style={{fontWeight:800,fontSize:20,color:"var(--navy)",marginBottom:20}}>Account Security</h2>
+        <S l="My Signature">
+          <p style={{fontSize:13,color:"var(--g5)",marginBottom:12}}>Your hand-drawn (or typed/uploaded) signature is saved to your account and automatically applied to your rental agreements.</p>
+          <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+            <div style={{width:240,height:90,border:"2px dashed var(--g3)",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",background:"#fff"}}>
+              {mySignature?.dataUrl?<img src={mySignature.dataUrl} alt="my signature" style={{maxHeight:74,maxWidth:220,objectFit:"contain"}}/>:<span style={{fontSize:13,color:"var(--g4)"}}>No signature yet</span>}
+            </div>
+            <div>
+              <button onClick={()=>setSigOpen(true)} className="btn bp bsm"><X n="edit" s={14}/>{mySignature?"Update signature":"Add signature"}</button>
+              {mySignature?.savedAt&&<div style={{fontSize:11,color:"var(--g5)",marginTop:6}}>Saved {dStr(new Date(mySignature.savedAt))}</div>}
+            </div>
+          </div>
+        </S>
         <S l="Change Password">
           <div style={{display:"flex",flexDirection:"column",gap:12,maxWidth:400}}>
             <div className="ig"><label>Current Password</label><input className="inf" type="password" value={pw.current} onChange={e=>sPw(p=>({...p,current:e.target.value}))} placeholder="••••••••"/></div>
@@ -5193,6 +5313,7 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout,creditLine,orders_all
       </div>}
 
     </div>
+    {sigOpen&&<SignaturePad title="Your signature" onClose={()=>setSigOpen(false)} onSave={(d)=>{saveMySignature&&saveMySignature(d);setSigOpen(false);t&&t("Signature saved — it will be applied to your contracts","success")}}/>}
   </div></div>;
 }
 
