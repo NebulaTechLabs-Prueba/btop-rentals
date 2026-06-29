@@ -2473,6 +2473,7 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
 
       {/* GATEWAYS */}
       <SC title="Connected Services / Payment Gateways">
+        <div className="text-xs text-stone-500 bg-stone-50 border border-stone-200 rounded-lg p-3 mb-4">🔒 Secret &amp; webhook keys are stored on the server, never in the browser. The frontend is pre-wired to Stripe Checkout (<code className="bg-white px-1 rounded">startStripeCheckout</code>); flip <code className="bg-white px-1 rounded">STRIPE_LIVE</code> once the backend host is connected. See <code className="bg-white px-1 rounded">docs/stripe-integration.md</code>.</div>
         <div className="space-y-4">
           {/* STRIPE */}
           <div className="border border-stone-200 rounded-xl p-4"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">S</div><div><div className="text-sm font-semibold">Stripe</div><div className="text-xs text-stone-500">Credit card payments</div></div></div><div className="flex items-center gap-2"><Pill tone={gw.stripe.connected?"emerald":"red"}>{gw.stripe.connected?"Connected":"Not connected"}</Pill><button onClick={()=>setGwEdit(gwEdit==="stripe"?null:"stripe")} className="text-xs text-blue-700 font-medium px-3 py-1 hover:bg-blue-50 rounded-lg">Manage</button></div></div>
@@ -2818,6 +2819,40 @@ function downloadDoc(doc){
     a.href=doc.dataUrl||("data:text/plain;charset=utf-8,"+encodeURIComponent(`Document: ${doc.name}\nCategory: ${doc.category}\nUploaded: ${doc.uploadedAt}\n\n(Original file is stored on the server in the production build.)`));
     a.download=doc.name||"document";a.click();
   }catch(e){}
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PAYMENTS ADAPTER — single seam to swap the simulated flow for real Stripe.
+   DEMO (STRIPE_LIVE=false): resolves after a short delay; no network, no keys.
+   PROD (STRIPE_LIVE=true): POSTs the cart to the backend, which creates a Stripe
+     Checkout Session with the SECRET key (server-side) and returns { url }; we
+     redirect the browser to Stripe's hosted page. The webhook later marks the
+     order Paid. Nothing here ever touches the secret/webhook keys.
+   Backend contract: see docs/stripe-integration.md
+   ───────────────────────────────────────────────────────────────────────── */
+const STRIPE_LIVE=false; /* flip to true once the backend host is connected */
+/* Map cart lines to Stripe-style line items (amounts in cents) for the backend */
+function cartToStripeLineItems(cart){
+  return (cart||[]).map(i=>({
+    name:i.un||"Rental",
+    description:[i.ut,i.sd&&i.ed?`${dateToStr(i.sd)} → ${dateToStr(i.ed)}`:null].filter(Boolean).join(" · "),
+    quantity:i.qty||1,
+    unit_amount:Math.round(((i.tp||0)+(i.dp||0))*100),
+    fleet_id:i.uid||null,
+  }));
+}
+async function startStripeCheckout({cart,amount,orderRef,successUrl,cancelUrl}){
+  if(STRIPE_LIVE){
+    const res=await fetch("/api/checkout/stripe",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({line_items:cartToStripeLineItems(cart),amount_cents:Math.round((amount||0)*100),order_ref:orderRef,success_url:successUrl,cancel_url:cancelUrl})});
+    if(!res.ok)throw new Error("checkout_failed");
+    const {url}=await res.json();
+    window.location.assign(url); /* hand off to Stripe-hosted checkout */
+    return {redirected:true};
+  }
+  /* DEMO: no backend — simulate the round-trip to the hosted page */
+  await new Promise(r=>setTimeout(r,1400));
+  return {redirected:false,simulated:true};
 }
 
 /* ═══ ADMIN · LIVE CARTS (who / when / what · search by cart code) ═══ */
@@ -4254,10 +4289,12 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},cred
       if(!creditLine||grandTotal>creditAvail)return; /* guarded by the panel message */
       confirm(payMethod,payDetail);setStep("done");return;
     }
-    /* Stripe: redirect to the hosted checkout, then the gateway confirms automatically */
+    /* Stripe: hand off to the payments adapter (simulated now, real Checkout Session once the backend is live) */
     if(payMethod==="card"){
       setStep("redirect");
-      setTimeout(()=>{confirm(payMethod,payDetail);setStep("done");},1400);
+      startStripeCheckout({cart,amount:totalDep,orderRef:"CART-"+Date.now(),successUrl:location.href,cancelUrl:location.href})
+        .then(r=>{if(r.redirected)return; /* real Stripe navigated away; webhook will confirm */ confirm(payMethod,payDetail);setStep("done");})
+        .catch(()=>setStep("payment")); /* on error, return to method selection */
       return;
     }
     confirm(payMethod,payDetail);
