@@ -76,6 +76,7 @@ const admSeedBookings=[
 const admSeedTx=Array.from({length:20},(_,i)=>{const d=new Date(2026,3,15);d.setDate(d.getDate()-i);return{id:"tx"+i,date:d.toISOString().split("T")[0],client:["Carlos Mendez","Laura Vega","Martinez Logistics","John Smith","Gulf Coast"][i%5],amount:Math.floor(200+Math.random()*3000),module:i%2?"Space":"Truck",method:["Stripe","Zelle","Cash"][i%4],status:i%6?"completed":"pending"};});
 
 const admSeedContacts=[
+  {id:"c0",name:"Test Client",email:"cliente@test.com",phone:"(469) 555-0150",city:"Laredo",company:"",idDoc:"TX DL 00000000",registered:"2026-02-01",lastOrder:"",totalSpent:0,orders:0,hasAccount:true},
   {id:"c1",name:"Carlos Mendez",email:"carlos@email.com",phone:"(469) 555-0101",city:"Laredo",company:"Mendez Trucking",idDoc:"TX DL 12345678",registered:"2026-01-15",lastOrder:"2026-04-10",totalSpent:4800,orders:3},
   {id:"c2",name:"Laura Vega",email:"laura@email.com",phone:"(469) 555-0202",city:"Laredo",company:"",idDoc:"TX DL 87654321",registered:"2026-02-20",lastOrder:"2026-04-12",totalSpent:1080,orders:2},
   {id:"c3",name:"John Smith",email:"john@email.com",phone:"(469) 555-0505",city:"San Antonio",company:"Smith & Sons",idDoc:"TX DL 11223344",registered:"2025-11-01",lastOrder:"2026-04-08",totalSpent:2100,orders:5},
@@ -1989,15 +1990,17 @@ function PayMod(){
 /* ═══ INVOICES CRM ═══ */
 function InvoiceMod(){
   const [invoices,setInvoices]=useState([
-    {id:"INV-001",date:"2026-04-14",due:"2026-04-28",client:"Carlos Mendez",email:"carlos@email.com",phone:"(469) 555-0101",items:[{desc:"Freightliner Cascadia – 14 day rental",qty:1,rate:2450}],tax:8.25,discount:0,status:"paid",notes:"Paid via Stripe",currency:"USD",source:"web"},
-    {id:"INV-002",date:"2026-04-12",due:"2026-04-26",client:"Laura Vega",email:"laura@email.com",phone:"(469) 555-0202",items:[{desc:"GMC 3500 Box Truck – 7 day rental",qty:1,rate:360}],tax:8.25,discount:0,status:"sent",notes:"Net 14",currency:"USD",source:"manual"},
-    {id:"INV-003",date:"2026-04-10",due:"2026-04-24",client:"Martinez Logistics",email:"info@martinez.com",phone:"(469) 555-0303",items:[{desc:"Yard A North Lot – Monthly lease",qty:1,rate:1200},{desc:"Security deposit",qty:1,rate:1200}],tax:0,discount:0,status:"draft",notes:"Annual lease",currency:"USD",source:"manual"},
-    {id:"INV-004",date:"2026-04-08",due:"2026-04-22",client:"Gulf Coast Freight",email:"ops@gulfcoast.com",phone:"(469) 555-0404",items:[{desc:"Warehouse B1 – Monthly lease",qty:1,rate:2800}],tax:0,discount:0,status:"completed",notes:"Auto-billed",currency:"USD",source:"web"},
-    {id:"INV-005",date:"2026-04-05",due:"2026-04-19",client:"John Smith",email:"john@email.com",phone:"(469) 555-0505",items:[{desc:"Dodge Ram Pick Up – 7 day rental",qty:1,rate:350},{desc:"Cleaning fee",qty:1,rate:75}],tax:8.25,discount:5,status:"completed",notes:"",currency:"USD",source:"web"},
-    {id:"INV-006",date:"2026-03-28",due:"2026-04-11",client:"Roberto Perez",email:"roberto@email.com",phone:"(469) 555-0909",items:[{desc:"Ottawa Yard Spotter – Monthly",qty:1,rate:3800}],tax:8.25,discount:0,status:"completed",notes:"Recurring",currency:"USD",source:"web"},
-    {id:"INV-007",date:"2026-03-20",due:"2026-04-03",client:"ABC Transport",email:"ops@abc.com",phone:"(469) 555-1010",items:[{desc:"Cold Storage E – Monthly",qty:1,rate:3500}],tax:0,discount:0,status:"completed",notes:"",currency:"USD",source:"web"},
-    {id:"INV-008",date:"2026-03-15",due:"2026-03-29",client:"Mike Johnson",email:"mike@email.com",phone:"(469) 555-0707",items:[{desc:"Forklift – 5 day rental",qty:1,rate:2250}],tax:8.25,discount:0,status:"completed",notes:"",currency:"USD",source:"manual"},
+    {id:"INV-001",date:"2026-04-14",due:"2026-04-28",client:"Carlos Mendez",email:"carlos@email.com",phone:"(469) 555-0101",items:[{desc:"Freightliner Cascadia – 14 day rental",qty:1,rate:2450,kind:"product"},{desc:"Security Deposit – Freightliner Cascadia",qty:1,rate:500,kind:"deposit"}],tax:8.25,discount:0,status:"paid",notes:"Paid via Stripe",currency:"USD",source:"web"},
+    {id:"INV-002",date:"2026-04-12",due:"2026-04-26",client:"Laura Vega",email:"laura@email.com",phone:"(469) 555-0202",items:[{desc:"GMC 3500 Box Truck – 7 day rental",qty:1,rate:360,kind:"product"},{desc:"Security Deposit – GMC 3500 Box Truck",qty:1,rate:150,kind:"deposit"}],tax:8.25,discount:0,status:"sent",notes:"Net 14",currency:"USD",source:"manual"},
+    {id:"INV-003",date:"2026-04-10",due:"2026-04-24",client:"Martinez Logistics",email:"info@martinez.com",phone:"(469) 555-0303",items:[{desc:"Yard A North Lot – Monthly lease",qty:1,rate:1200,kind:"product"},{desc:"Security Deposit – Yard A North Lot",qty:1,rate:1200,kind:"deposit"}],tax:0,discount:0,status:"draft",notes:"Annual lease",currency:"USD",source:"manual"},
+    {id:"INV-004",date:"2026-04-08",due:"2026-04-22",client:"Gulf Coast Freight",email:"ops@gulfcoast.com",phone:"(469) 555-0404",items:[{desc:"Warehouse B1 – Monthly lease",qty:1,rate:2800,kind:"product"},{desc:"Security Deposit – Warehouse B1",qty:1,rate:1000,kind:"deposit"}],tax:0,discount:0,status:"completed",notes:"Auto-billed",currency:"USD",source:"web"},
+    {id:"INV-005",date:"2026-04-05",due:"2026-04-19",client:"John Smith",email:"john@email.com",phone:"(469) 555-0505",items:[{desc:"Dodge Ram Pick Up – 7 day rental",qty:1,rate:350,kind:"product"},{desc:"Security Deposit – Dodge Ram Pick Up",qty:1,rate:300,kind:"deposit"},{desc:"Cleaning fee",qty:1,rate:75,kind:"product"}],tax:8.25,discount:5,status:"completed",notes:"",currency:"USD",source:"web"},
+    {id:"INV-006",date:"2026-03-28",due:"2026-04-11",client:"Roberto Perez",email:"roberto@email.com",phone:"(469) 555-0909",items:[{desc:"Ottawa Yard Spotter – Monthly",qty:1,rate:3800,kind:"product"},{desc:"Security Deposit – Ottawa Yard Spotter",qty:1,rate:500,kind:"deposit"}],tax:8.25,discount:0,status:"completed",notes:"Recurring",currency:"USD",source:"web"},
+    {id:"INV-007",date:"2026-03-20",due:"2026-04-03",client:"ABC Transport",email:"ops@abc.com",phone:"(469) 555-1010",items:[{desc:"Cold Storage E – Monthly",qty:1,rate:3500,kind:"product"},{desc:"Security Deposit – Cold Storage E",qty:1,rate:1000,kind:"deposit"}],tax:0,discount:0,status:"completed",notes:"",currency:"USD",source:"web"},
+    {id:"INV-008",date:"2026-03-15",due:"2026-03-29",client:"Mike Johnson",email:"mike@email.com",phone:"(469) 555-0707",items:[{desc:"Forklift – 5 day rental",qty:1,rate:2250,kind:"product"},{desc:"Security Deposit – Forklift",qty:1,rate:300,kind:"deposit"}],tax:8.25,discount:0,status:"completed",notes:"",currency:"USD",source:"manual"},
   ]);
+  /* Global deposit-return policy (admin default). Each invoice may override via inv.depositReturn. */
+  const [depositPolicy,setDepositPolicy]=useState({mode:"percentage",value:100});
   const [subNav,setSubNav]=useState("board"); // board | history | config
   const [creating,setCreating]=useState(false);
   const [editInv,setEditInv]=useState(null);
@@ -2009,6 +2012,10 @@ function InvoiceMod(){
 
   const calcSub=(inv)=>inv.items.reduce((s,i)=>s+(i.qty||0)*(i.rate||0),0);
   const calcTotal=(inv)=>{const sub=calcSub(inv);const tax=sub*((inv.tax||0)/100);return(sub+tax)*(1-(inv.discount||0)/100)};
+  /* Deposit total = sum of all lines flagged kind:"deposit". Refund applies the policy (per-invoice override or global). */
+  const depositTotal=(inv)=>(inv.items||[]).filter(i=>i.kind==="deposit").reduce((s,i)=>s+(i.qty||0)*(i.rate||0),0);
+  const refundPolicyFor=(inv)=>inv.depositReturn||depositPolicy;
+  const refundAmount=(inv)=>{const dep=depositTotal(inv);const pol=refundPolicyFor(inv);return pol.mode==="fixed"?Math.min(dep,Number(pol.value)||0):dep*((Number(pol.value)||0)/100)};
 
   const drafts=invoices.filter(i=>i.status==="draft");
   const sent=invoices.filter(i=>i.status==="sent");
@@ -2022,8 +2029,9 @@ function InvoiceMod(){
 
   const generatePDF=(inv)=>{
     const sub=calcSub(inv);const tax=sub*((inv.tax||0)/100);const disc=(sub+tax)*((inv.discount||0)/100);const total=sub+tax-disc;
+    const dep=depositTotal(inv);const refund=refundAmount(inv);const pol=refundPolicyFor(inv);
     const c=pdfConfig;
-    const html=`<html><head><style>body{font-family:Arial;padding:40px;max-width:800px;margin:0 auto}h1{color:${c.color}}table{width:100%;border-collapse:collapse;margin:20px 0}th{background:#f1f5f9;text-align:left;padding:8px;font-size:12px;border-bottom:2px solid #e2e8f0}td{padding:8px;border-bottom:1px solid #e2e8f0}.total{font-size:18px;font-weight:bold;border-top:2px solid ${c.color};padding-top:10px}</style></head><body><h1>${c.companyName}</h1><div style="font-size:12px;color:#64748b">${c.address} · ${c.phone} · ${c.email}</div><hr><div style="display:flex;justify-content:space-between;margin:20px 0"><div><strong>Invoice:</strong> ${inv.id}<br><strong>Date:</strong> ${inv.date}<br><strong>Status:</strong> ${inv.status.toUpperCase()}</div><div><strong>Bill To:</strong><br>${inv.client}<br>${inv.email}${inv.phone?" · "+inv.phone:""}</div></div><table><thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th style="text-align:right">Amount</th></tr></thead><tbody>${inv.items.map(it=>"<tr><td>"+it.desc+"</td><td>"+it.qty+"</td><td>$"+(it.rate||0).toLocaleString()+"</td><td style='text-align:right'>$"+((it.qty||0)*(it.rate||0)).toLocaleString()+"</td></tr>").join("")}</tbody></table><div style="text-align:right;margin-top:20px"><div>Subtotal: $${sub.toLocaleString()}</div>${inv.tax>0?"<div>Tax ("+inv.tax+"%): $"+tax.toFixed(2)+"</div>":""}${inv.discount>0?"<div>Discount ("+inv.discount+"%): -$"+disc.toFixed(2)+"</div>":""}<div class="total">Total: $${total.toFixed(2)} ${inv.currency}</div></div>${inv.notes?"<div style='margin-top:30px;padding:12px;background:#f8fafc;border-radius:8px;font-size:12px'>Notes: "+inv.notes+"</div>":""}<div style="text-align:center;margin-top:40px;font-size:11px;color:#94a3b8">${c.footer}</div></body></html>`;
+    const html=`<html><head><style>body{font-family:Arial;padding:40px;max-width:800px;margin:0 auto}h1{color:${c.color}}table{width:100%;border-collapse:collapse;margin:20px 0}th{background:#f1f5f9;text-align:left;padding:8px;font-size:12px;border-bottom:2px solid #e2e8f0}td{padding:8px;border-bottom:1px solid #e2e8f0}.total{font-size:18px;font-weight:bold;border-top:2px solid ${c.color};padding-top:10px}</style></head><body><h1>${c.companyName}</h1><div style="font-size:12px;color:#64748b">${c.address} · ${c.phone} · ${c.email}</div><hr><div style="display:flex;justify-content:space-between;margin:20px 0"><div><strong>Invoice:</strong> ${inv.id}<br><strong>Date:</strong> ${inv.date}<br><strong>Status:</strong> ${inv.status.toUpperCase()}</div><div><strong>Bill To:</strong><br>${inv.client}<br>${inv.email}${inv.phone?" · "+inv.phone:""}</div></div><table><thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th style="text-align:right">Amount</th></tr></thead><tbody>${inv.items.map(it=>"<tr"+(it.kind==="deposit"?" style='color:#1d4ed8'":"")+"><td>"+(it.kind==="deposit"?"🔒 ":"")+it.desc+"</td><td>"+it.qty+"</td><td>$"+(it.rate||0).toLocaleString()+"</td><td style='text-align:right'>$"+((it.qty||0)*(it.rate||0)).toLocaleString()+"</td></tr>").join("")}</tbody></table><div style="text-align:right;margin-top:20px"><div>Subtotal: $${sub.toLocaleString()}</div>${inv.tax>0?"<div>Tax ("+inv.tax+"%): $"+tax.toFixed(2)+"</div>":""}${inv.discount>0?"<div>Discount ("+inv.discount+"%): -$"+disc.toFixed(2)+"</div>":""}<div class="total">Total: $${total.toFixed(2)} ${inv.currency}</div>${dep>0?"<div style='margin-top:10px;font-size:12px;color:#1d4ed8;border-top:1px dashed #cbd5e1;padding-top:8px'>Security Deposit held: $"+dep.toLocaleString()+"<br>Refundable on return: <strong>$"+refund.toLocaleString()+"</strong> ("+(pol.mode==="fixed"?"fixed amount":pol.value+"%")+")</div>":""}</div>${inv.notes?"<div style='margin-top:30px;padding:12px;background:#f8fafc;border-radius:8px;font-size:12px'>Notes: "+inv.notes+"</div>":""}<div style="text-align:center;margin-top:40px;font-size:11px;color:#94a3b8">${c.footer}</div></body></html>`;
     const w=window.open("","_blank","width=800,height=1000");if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),500)}
   };
 
@@ -2121,12 +2129,16 @@ function InvoiceMod(){
             <div className="p-5 space-y-4">
               <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-xs font-semibold">{viewInv.client.split(" ").map(n=>n[0]).join("").slice(0,2)}</div><div><div className="font-semibold">{viewInv.client}</div><div className="text-xs text-stone-500">{viewInv.email}</div>{viewInv.phone&&<div className="text-xs text-stone-500">{viewInv.phone}</div>}</div></div>
               <div className="grid grid-cols-2 gap-3 text-xs"><div className="bg-stone-50 rounded-lg p-3"><div className="text-stone-400 uppercase text-[10px]">Date</div><div className="font-medium mt-0.5">{viewInv.date}</div></div><div className="bg-stone-50 rounded-lg p-3"><div className="text-stone-400 uppercase text-[10px]">Due</div><div className="font-medium mt-0.5">{viewInv.due||"On receipt"}</div></div></div>
-              <div><p className="text-xs font-semibold text-stone-500 uppercase mb-2">Items</p>{viewInv.items.map((item,idx)=>(<div key={idx} className="flex justify-between py-2 border-b border-stone-100 last:border-0 text-sm"><div className="flex-1"><span>{item.desc}</span><span className="text-stone-400 ml-2">x{item.qty}</span></div><span className="font-semibold">{$f((item.qty||0)*(item.rate||0))}</span></div>))}</div>
+              <div><p className="text-xs font-semibold text-stone-500 uppercase mb-2">Items</p>{viewInv.items.map((item,idx)=>(<div key={idx} className="flex justify-between py-2 border-b border-stone-100 last:border-0 text-sm"><div className="flex-1"><span className={item.kind==="deposit"?"text-blue-700":""}>{item.kind==="deposit"?"🔒 ":""}{item.desc}</span><span className="text-stone-400 ml-2">x{item.qty}</span></div><span className="font-semibold">{$f((item.qty||0)*(item.rate||0))}</span></div>))}</div>
               <div className="bg-blue-900 text-white rounded-xl p-4 space-y-1">
                 <div className="flex justify-between text-sm"><span className="text-blue-300">Subtotal</span><span>{$f(calcSub(viewInv))}</span></div>
                 {viewInv.tax>0&&<div className="flex justify-between text-sm"><span className="text-blue-300">Tax</span><span>{$f(calcSub(viewInv)*(viewInv.tax/100))}</span></div>}
                 <div className="flex justify-between text-lg font-bold pt-2 border-t border-blue-700"><span>Total</span><span>{$f(calcTotal(viewInv))} {viewInv.currency}</span></div>
               </div>
+              {depositTotal(viewInv)>0&&<div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm">
+                <div className="flex justify-between mb-1"><span className="text-stone-500">Security deposit held</span><span className="font-semibold">{$f(depositTotal(viewInv))}</span></div>
+                <div className="flex justify-between"><span className="text-stone-500">Refundable on return <span className="text-[10px] text-stone-400">({refundPolicyFor(viewInv).mode==="fixed"?"fixed":refundPolicyFor(viewInv).value+"%"}{viewInv.depositReturn?", custom":""})</span></span><span className="font-bold text-blue-800">{$f(refundAmount(viewInv))}</span></div>
+              </div>}
               {viewInv.notes&&<div className="bg-stone-50 rounded-lg p-3 text-xs text-stone-600"><strong>Notes:</strong> {viewInv.notes}</div>}
               <div className="text-xs text-stone-400 flex items-center gap-2"><span className={`w-2 h-2 rounded-full ${viewInv.source==="web"?"bg-emerald-500":"bg-blue-500"}`}/>{viewInv.source==="web"?"Generated automatically (web booking)":"Created manually"}</div>
               <div className="flex gap-2 pt-2">
@@ -2207,6 +2219,22 @@ function InvoiceMod(){
             </div>
           </SC>
         </div>
+        {/* DEPOSIT RETURN POLICY (global default) */}
+        <div className="mt-6">
+          <SC title="Deposit Return Policy">
+            <p className="text-sm text-stone-500 mb-4">Every invoice lists each item's <strong>security deposit as its own line</strong>. This default sets how much of that deposit is returned to the client when equipment is returned in good condition. It can be overridden per invoice in the invoice editor.</p>
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="inline-flex bg-stone-100 rounded-full p-1">
+                {[["percentage","Percentage"],["fixed","Fixed amount"]].map(([v,l])=><button key={v} onClick={()=>setDepositPolicy(p=>({...p,mode:v}))} className={`px-4 py-1.5 rounded-full text-xs font-semibold ${depositPolicy.mode===v?"bg-blue-900 text-white":"text-stone-600"}`}>{l}</button>)}
+              </div>
+              <div className="ig"><label className="text-xs font-medium text-stone-600">{depositPolicy.mode==="fixed"?"Amount returned ($)":"Percentage returned (%)"}</label>
+                <input type="number" value={depositPolicy.value} onChange={e=>setDepositPolicy(p=>({...p,value:e.target.value}))} className="w-40 px-3 py-2 border border-stone-200 rounded-lg text-sm"/>
+              </div>
+              <div className="text-xs text-stone-500 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2">Example on a $500 deposit → refund <strong>{depositPolicy.mode==="fixed"?$f(Math.min(500,Number(depositPolicy.value)||0)):$f(500*((Number(depositPolicy.value)||0)/100))}</strong></div>
+            </div>
+            <p className="text-[11px] text-stone-400 mt-3">This value feeds future deposit-return / settlement. Damage or fees can reduce the refund at return time.</p>
+          </SC>
+        </div>
       </div>}
     </div>
   );
@@ -2217,8 +2245,10 @@ function InvoiceEditor({inv:initial,onClose,onSave,generatePDF}){
   const [inv,setInv]=useState(initial||{id:"INV-"+String(Math.floor(100+Math.random()*900)),date:new Date().toISOString().split("T")[0],due:"",client:"",email:"",phone:"",items:[{desc:"",qty:1,rate:0}],tax:8.25,discount:0,status:"draft",notes:"",currency:"USD"});
   const u=(k,v)=>setInv(p=>({...p,[k]:v}));
   const uItem=(idx,k,v)=>{const items=[...inv.items];items[idx]={...items[idx],[k]:v};u("items",items)};
-  const addItem=()=>u("items",[...inv.items,{desc:"",qty:1,rate:0}]);
+  const addItem=()=>u("items",[...inv.items,{desc:"",qty:1,rate:0,kind:"product"}]);
   const rmItem=(idx)=>u("items",inv.items.filter((_,i)=>i!==idx));
+  const depTotal=(inv.items||[]).filter(i=>i.kind==="deposit").reduce((s,i)=>s+(i.qty||0)*(i.rate||0),0);
+  const ov=inv.depositReturn; /* per-invoice override (undefined = use global default) */
   const sub=inv.items.reduce((s,i)=>s+(i.qty||0)*(i.rate||0),0);const taxAmt=sub*((inv.tax||0)/100);const discAmt=(sub+taxAmt)*((inv.discount||0)/100);const total=sub+taxAmt-discAmt;
 
   return (
@@ -2229,9 +2259,19 @@ function InvoiceEditor({inv:initial,onClose,onSave,generatePDF}){
           <div className="grid grid-cols-2 gap-4"><F label="Client *"><Inp value={inv.client} onChange={v=>u("client",v)} placeholder="Name or Company"/></F><F label="Email *"><Inp value={inv.email} onChange={v=>u("email",v)} type="email"/></F></div>
           <div className="grid grid-cols-3 gap-4"><F label="Date"><Inp value={inv.date} onChange={v=>u("date",v)} type="date"/></F><F label="Due"><Inp value={inv.due||""} onChange={v=>u("due",v)} type="date"/></F><F label="Currency"><Sel value={inv.currency} onChange={v=>u("currency",v)} options={["USD","MXN","EUR"]}/></F></div>
           <div><div className="flex items-center justify-between mb-3"><p className="text-xs font-semibold uppercase tracking-wider text-stone-500">Line Items</p><button onClick={addItem} className="text-xs text-blue-700 font-medium inline-flex items-center gap-1"><Plus className="w-3 h-3"/>Add</button></div>
-            {inv.items.map((item,idx)=>(<div key={idx} className="flex items-start gap-3 p-3 bg-stone-50 rounded-xl border border-stone-200 mb-2"><div className="flex-1"><F label="Description"><Inp value={item.desc} onChange={v=>uItem(idx,"desc",v)}/></F></div><div className="w-20"><F label="Qty"><Inp value={item.qty} onChange={v=>uItem(idx,"qty",Number(v))} type="number"/></F></div><div className="w-28"><F label="Rate"><Inp value={item.rate} onChange={v=>uItem(idx,"rate",Number(v))} type="number"/></F></div><div className="w-24 pt-6 text-right font-semibold text-sm">{$f((item.qty||0)*(item.rate||0))}</div>{inv.items.length>1&&<button onClick={()=>rmItem(idx)} className="pt-6 text-red-500"><Xx className="w-4 h-4"/></button>}</div>))}</div>
-          <div><p className="text-xs text-stone-500 mb-2">Quick add:</p><div className="flex gap-2 flex-wrap">{[["Truck Daily",250],["Truck Weekly",875],["Truck Monthly",3600],["Storage",1200],["Deposit",500],["Cleaning",75],["Late Fee",150],["Driver",200],["Custom",0]].map(([d,r])=>(<button key={d} onClick={()=>u("items",[...inv.items,{desc:d,qty:1,rate:r}])} className="px-3 py-1.5 bg-white border border-stone-200 rounded-full text-xs hover:bg-stone-50">{d}</button>))}</div></div>
+            {inv.items.map((item,idx)=>(<div key={idx} className={`flex items-start gap-3 p-3 rounded-xl border mb-2 ${item.kind==="deposit"?"bg-blue-50 border-blue-200":"bg-stone-50 border-stone-200"}`}><div className="w-28"><F label="Type"><Sel value={item.kind||"product"} onChange={v=>uItem(idx,"kind",v)} options={[["product","Product"],["deposit","Deposit"]]}/></F></div><div className="flex-1"><F label="Description"><Inp value={item.desc} onChange={v=>uItem(idx,"desc",v)}/></F></div><div className="w-20"><F label="Qty"><Inp value={item.qty} onChange={v=>uItem(idx,"qty",Number(v))} type="number"/></F></div><div className="w-28"><F label={item.kind==="deposit"?"Deposit $":"Rate"}><Inp value={item.rate} onChange={v=>uItem(idx,"rate",Number(v))} type="number"/></F></div><div className="w-24 pt-6 text-right font-semibold text-sm">{$f((item.qty||0)*(item.rate||0))}</div>{inv.items.length>1&&<button onClick={()=>rmItem(idx)} className="pt-6 text-red-500"><Xx className="w-4 h-4"/></button>}</div>))}</div>
+          <div><p className="text-xs text-stone-500 mb-2">Quick add:</p><div className="flex gap-2 flex-wrap">{[["Truck Daily",250,"product"],["Truck Weekly",875,"product"],["Truck Monthly",3600,"product"],["Storage",1200,"product"],["Security Deposit",500,"deposit"],["Cleaning",75,"product"],["Late Fee",150,"product"],["Driver",200,"product"],["Custom",0,"product"]].map(([d,r,k])=>(<button key={d} onClick={()=>u("items",[...inv.items,{desc:d,qty:1,rate:r,kind:k}])} className={`px-3 py-1.5 border rounded-full text-xs hover:bg-stone-50 ${k==="deposit"?"bg-blue-50 border-blue-200 text-blue-700":"bg-white border-stone-200"}`}>{d}</button>))}</div></div>
           <div className="grid grid-cols-2 gap-4"><F label="Tax %"><Inp value={inv.tax} onChange={v=>u("tax",Number(v))} type="number"/></F><F label="Discount %"><Inp value={inv.discount} onChange={v=>u("discount",Number(v))} type="number"/></F></div>
+          {/* DEPOSIT RETURN — per-invoice override (otherwise the global policy in Configuration applies) */}
+          <div className="border border-stone-200 rounded-xl p-4">
+            <label className="flex items-center gap-2 text-sm font-semibold mb-1 cursor-pointer"><input type="checkbox" checked={!!ov} onChange={e=>u("depositReturn",e.target.checked?{mode:"percentage",value:100}:undefined)}/>Custom deposit-return for this invoice</label>
+            <p className="text-xs text-stone-500 mb-3">Deposit on this invoice: <strong>{$f(depTotal)}</strong>. {ov?"Overrides":"Uses"} the global Deposit Return Policy.</p>
+            {ov&&<div className="flex flex-wrap items-end gap-3">
+              <div className="inline-flex bg-stone-100 rounded-full p-1">{[["percentage","%"],["fixed","Fixed $"]].map(([v,l])=><button key={v} type="button" onClick={()=>u("depositReturn",{...ov,mode:v})} className={`px-3 py-1 rounded-full text-xs font-semibold ${ov.mode===v?"bg-blue-900 text-white":"text-stone-600"}`}>{l}</button>)}</div>
+              <div className="ig"><label className="text-xs text-stone-600">{ov.mode==="fixed"?"Amount ($)":"Percent (%)"}</label><input type="number" value={ov.value} onChange={e=>u("depositReturn",{...ov,value:Number(e.target.value)})} className="w-32 px-3 py-2 border border-stone-200 rounded-lg text-sm"/></div>
+              <div className="text-xs text-stone-500 bg-stone-50 rounded-lg px-3 py-2">Refund: <strong>{$f(ov.mode==="fixed"?Math.min(depTotal,Number(ov.value)||0):depTotal*((Number(ov.value)||0)/100))}</strong></div>
+            </div>}
+          </div>
           <div className="bg-stone-900 text-white rounded-xl p-5"><div className="flex justify-between text-sm mb-2"><span className="text-stone-400">Subtotal</span><span>{$f(sub)}</span></div>{inv.tax>0&&<div className="flex justify-between text-sm mb-2"><span className="text-stone-400">Tax</span><span>{$f(taxAmt)}</span></div>}{inv.discount>0&&<div className="flex justify-between text-sm mb-2"><span className="text-stone-400">Discount</span><span>-{$f(discAmt)}</span></div>}<div className="flex justify-between text-lg font-bold pt-2 border-t border-stone-700"><span>Total</span><span>{$f(total)} {inv.currency}</span></div></div>
           <F label="Notes"><TArea value={inv.notes||""} onChange={v=>u("notes",v)}/></F>
         </div>
@@ -3289,8 +3329,9 @@ export default function App(){
   const clientDocs=user?(clientDocsAll[user.email]||[]):[];
   const addClientDoc=(doc)=>{if(!user)return;setClientDocsAll(prev=>({...prev,[user.email]:[...(prev[user.email]||[]),doc]}))};
   const removeClientDoc=(id)=>{if(!user)return;setClientDocsAll(prev=>({...prev,[user.email]:(prev[user.email]||[]).filter(d=>d.id!==id)}))};
-  const [creditLines,setCreditLines]=usePersistentState("btop_creditLines_v2",[
+  const [creditLines,setCreditLines]=usePersistentState("btop_creditLines_v3",[
     /* Seed credit lines tied to real demo clients (admSeedContacts) */
+    {id:"CL-TEST",clientName:"Test Client",email:"cliente@test.com",limit:10000,terms:30,grantedAt:"2026-05-10T00:00:00.000Z",active:true},
     {id:"CL-DEMO1",clientName:"Roberto Perez",email:"roberto@email.com",limit:15000,terms:30,grantedAt:"2026-05-01T00:00:00.000Z",active:true},
     {id:"CL-DEMO2",clientName:"ABC Transport",email:"ops@abctransport.com",limit:50000,terms:45,grantedAt:"2026-04-15T00:00:00.000Z",active:true},
   ]);
@@ -4495,10 +4536,12 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},cred
           <div style={{display:"flex",alignItems:"center",gap:12}}><div style={{width:48,height:48,borderRadius:14,background:"var(--b0)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>💵</div><div><h3 style={{fontWeight:800,fontSize:18,color:"var(--navy)"}}>Cash / Check Payment</h3><p style={{fontSize:13,color:"var(--g5)"}}>Coordinate your payment with our team</p></div></div>
           <button onClick={()=>setCashModal(false)} style={{background:"var(--g1)",border:"none",borderRadius:8,padding:8,cursor:"pointer"}}><X n="x" s={18}/></button>
         </div>
-        <div style={{padding:16,background:"var(--b0)",borderRadius:14,marginBottom:16}}>
-          <p style={{fontSize:12,color:"var(--b6)",fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Call or message us</p>
-          <a href={`tel:${(company.phone||SUPPORT.phone).replace(/[^0-9+]/g,"")}`} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",textDecoration:"none",color:"var(--navy)",fontWeight:700,fontSize:18}}><X n="phone" s={18} c="var(--b6)"/>{company.phone||SUPPORT.phone}</a>
-          <a href={`mailto:${company.email||SUPPORT.email}`} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",textDecoration:"none",color:"var(--g7)",fontWeight:600,fontSize:14}}><X n="mail" s={16} c="var(--g5)"/>{company.email||SUPPORT.email}</a>
+        <div style={{marginBottom:16}}>
+          <p style={{fontSize:12,color:"var(--b6)",fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>Call or message us</p>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <a href={`tel:${(company.phone||SUPPORT.phone).replace(/[^0-9+]/g,"")}`} className="btn" style={{width:"100%",justifyContent:"center",gap:10,background:"var(--b6)",color:"#fff",padding:"14px 0",fontSize:17,boxShadow:"0 4px 14px rgba(27,77,219,.3)"}}><X n="phone" s={20} c="#fff"/>{company.phone||SUPPORT.phone}</a>
+            <a href={`mailto:${company.email||SUPPORT.email}`} className="btn" style={{width:"100%",justifyContent:"center",gap:10,background:"#fff",color:"var(--b7)",border:"2px solid var(--b1)",padding:"12px 0",fontSize:15}}><X n="mail" s={18} c="var(--b6)"/>{company.email||SUPPORT.email}</a>
+          </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8,padding:12,background:"var(--g0)",borderRadius:10,marginBottom:18}}>
           <X n="map" s={16} c="var(--b5)"/><span style={{fontSize:13,color:"var(--g7)"}}>{company.address||"9807 Mines Rd #9, Laredo TX 78045"} · {company.hours||"Mon–Fri 7AM–6PM"}</span>
