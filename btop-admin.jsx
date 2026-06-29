@@ -3280,7 +3280,7 @@ function CreditMod({creditLines,setCreditLines,orders,contacts=[]}){
 }
 
 /* ═══ ADMIN · RENTAL CONTRACTS (auto-generated when the admin approves payment) ═══ */
-function ContractsMod({contracts,setContracts,contractTpl,setContractTpl,signaturesAll={},company={},setCompany}){
+function ContractsMod({contracts,setContracts,contractTpl,setContractTpl,signaturesAll={},company={},setCompany,contractPolicy={sendWhen:"both"},setContractPolicy,signContractAsBtop,sendAgreementNow}){
   const [tab,setTab]=useState("list");
   const [draft,setDraft]=useState(contractTpl);
   const [view,setView]=useState(null);
@@ -3289,7 +3289,6 @@ function ContractsMod({contracts,setContracts,contractTpl,setContractTpl,signatu
   /* Per-document signatures: lessee stamped at checkout, lessor stamped when admin presses "Sign as BTOP" on THIS contract */
   const signState=(c)=>{const l=!!c.lesseeSig?.dataUrl,r=!!c.lessorSig?.dataUrl;return l&&r?"both":l||r?"partial":"none"};
   const downloadSigned=(c)=>generateSignedPdf(c,{clientSig:c.lesseeSig?.dataUrl,repSig:c.lessorSig?.dataUrl,repName:c.lessorSig?.name||company.repName,company,clientSignedAt:c.lesseeSig?.signedAt,repSignedAt:c.lessorSig?.signedAt});
-  const signAsBtop=(c,dataUrl)=>{const sig={dataUrl,name:company.repName||"BTOP Representative",signedAt:nowISO()};setContracts(p=>p.map(x=>x.id===c.id?{...x,lessorSig:sig}:x));setView(v=>v&&v.id===c.id?{...v,lessorSig:sig}:v)};
   const [from,setFrom]=useState("");
   const [to,setTo]=useState("");
   const ql=q.trim().toLowerCase();
@@ -3323,12 +3322,12 @@ function ContractsMod({contracts,setContracts,contractTpl,setContractTpl,signatu
     </div>
     <SC title={`Contracts (${filtered.length})`} padded={false}>
       {filtered.length===0?<div className="text-center py-16 text-stone-400"><FileText className="w-8 h-8 mx-auto mb-2"/><p>{contracts.length===0?"No contracts yet. They are issued when a payment is approved.":"No contracts match your search."}</p></div>
-      :<DT headers={["Agreement No.","Order","Client","Issued","Signature",""]} rows={filtered.map(c=>{const ss=signState(c);return [
+      :<DT headers={["Agreement No.","Order","Client","Signature","Sending",""]} rows={filtered.map(c=>{const ss=signState(c);return [
         <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded">{c.contractNum}</span>,
         <span className="font-mono text-xs">{c.oid}</span>,
         <div><div className="font-semibold text-sm">{c.client}</div><div className="text-[10px] text-stone-400">{c.email}</div></div>,
-        <span className="text-xs text-stone-500">{fmtDateTime(c.createdAt)}</span>,
         <Pill tone={ss==="both"?"emerald":ss==="partial"?"amber":"stone"}>{ss==="both"?"✓ Signed":ss==="partial"?"Partially signed":"Not signed"}</Pill>,
+        c.sent?<Pill tone="blue">📧 Sent</Pill>:<Pill tone="amber">⏳ Awaiting</Pill>,
         <div className="flex gap-1"><button onClick={()=>setView(c)} className="p-1.5 hover:bg-stone-100 rounded-lg" title="Review"><Eye className="w-3.5 h-3.5"/></button><button onClick={()=>downloadSigned(c)} className="p-1.5 hover:bg-blue-50 text-blue-700 rounded-lg" title="Download signed PDF"><Download className="w-3.5 h-3.5"/></button></div>,
       ]})}/>}
     </SC></>}
@@ -3349,20 +3348,30 @@ function ContractsMod({contracts,setContracts,contractTpl,setContractTpl,signatu
         {(()=>{const sample={oid:"ORD-DEMO12",un:"Sample Client",ue:"client@sample.com",bPhone:"(469) 555-0000",sd:"2026-07-01",ed:"2026-07-08",days:7,payMethod:"Stripe (card)",approvedAt:nowISO(),items:[{name:"Freightliner Cascadia",cat:"Daycab",days:7,qty:1,rate:1155,deposit:500}]};const r=renderContract(draft,sample);return <div><div className="font-bold text-sm text-blue-900 mb-2">{r.title}</div><pre className="whitespace-pre-wrap text-[11px] leading-relaxed text-stone-700 bg-stone-50 p-3 rounded-lg max-h-[420px] overflow-auto">{r.body}</pre><div className="text-[10px] text-stone-400 mt-2">{r.footer}</div></div>})()}
       </SC>
     </div>}
-    {view&&(()=>{const ls=view.lesseeSig;const lr=view.lessorSig;const ss=signState(view);return <div style={{position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.4)",padding:16}} onClick={()=>setView(null)}>
+    {tab==="tpl"&&<div className="mt-5"><SC title="Sending policy — how strict before the agreement is emailed">
+      <p className="text-sm text-stone-500 mb-3">Configure the signature requirement that must be met before the rental agreement is automatically sent to the client.</p>
+      <div className="flex flex-col gap-2 max-w-xl">
+        {[["both","Both signatures required","Strictest — send only after the client AND the BTOP representative have signed."],["client","Client signature required","Send once the client has signed (BTOP can countersign later)."],["none","No signature required","Send as soon as the agreement is issued (on payment approval)."]].map(([v,l,d])=>
+          <label key={v} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer ${contractPolicy.sendWhen===v?"bg-blue-50 border-blue-300":"bg-white border-stone-200"}`}>
+            <input type="radio" name="sendpol" checked={contractPolicy.sendWhen===v} onChange={()=>setContractPolicy&&setContractPolicy({sendWhen:v})} className="mt-1"/>
+            <div><div className="text-sm font-semibold text-stone-800">{l}</div><div className="text-xs text-stone-500">{d}</div></div>
+          </label>)}
+      </div>
+    </SC></div>}
+    {view&&(()=>{const live=contracts.find(x=>x.id===view.id)||view;const ls=live.lesseeSig;const lr=live.lessorSig;const ss=signState(live);return <div style={{position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.4)",padding:16}} onClick={()=>setView(null)}>
       <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white"><div className="flex items-center gap-2"><span className="font-mono font-bold text-blue-700">{view.contractNum}</span><Pill tone={ss==="both"?"emerald":ss==="partial"?"amber":"stone"}>{ss==="both"?"✓ Signed":ss==="partial"?"Partially signed":"Not signed"}</Pill></div><div className="flex gap-2"><button onClick={()=>downloadSigned(view)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1"><Download className="w-3.5 h-3.5"/>Download signed PDF</button><button onClick={()=>setView(null)} className="p-1.5 hover:bg-stone-100 rounded-full"><Xx className="w-4 h-4"/></button></div></div>
-        <div className="p-5"><div className="font-bold text-blue-900 mb-3">{view.title}</div><pre className="whitespace-pre-wrap text-xs leading-relaxed text-stone-700">{view.body}</pre>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white"><div className="flex items-center gap-2"><span className="font-mono font-bold text-blue-700">{live.contractNum}</span><Pill tone={ss==="both"?"emerald":ss==="partial"?"amber":"stone"}>{ss==="both"?"✓ Signed":ss==="partial"?"Partially signed":"Not signed"}</Pill>{live.sent?<Pill tone="blue">📧 Sent</Pill>:<Pill tone="amber">⏳ Awaiting</Pill>}</div><div className="flex gap-2">{!live.sent&&sendAgreementNow&&<button onClick={()=>sendAgreementNow(live.id)} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1"><Mail className="w-3.5 h-3.5"/>Send now</button>}<button onClick={()=>downloadSigned(live)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1"><Download className="w-3.5 h-3.5"/>Download signed PDF</button><button onClick={()=>setView(null)} className="p-1.5 hover:bg-stone-100 rounded-full"><Xx className="w-4 h-4"/></button></div></div>
+        <div className="p-5"><div className="font-bold text-blue-900 mb-3">{live.title}</div><pre className="whitespace-pre-wrap text-xs leading-relaxed text-stone-700">{stripSigPlaceholders(live.body)}</pre>
           {/* SIGNATURES */}
           <div className="grid grid-cols-2 gap-4 mt-5 pt-4 border-t">
-            <div><div className="text-[10px] uppercase font-semibold text-stone-400 mb-1">Lessor — {company.name||"BTOP Rentals"}</div>{lr?.dataUrl?<><img src={lr.dataUrl} alt="rep signature" style={{height:48,maxWidth:"100%",objectFit:"contain"}}/><div className="text-[10px] text-stone-500 mt-1">{lr.name||"Authorized Representative"} · {fmtDateTime(lr.signedAt)}</div></>:<><button onClick={()=>{company.repSignature?signAsBtop(view,company.repSignature):setRepSigModal(true)}} className="px-3 py-1.5 bg-blue-900 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5"><Pencil className="w-3 h-3"/>{company.repSignature?"Sign as BTOP":"Set up signature & sign"}</button>{!company.repSignature&&<div className="text-[10px] text-amber-600 mt-1">No representative signature configured yet — you'll set one up.</div>}</>}</div>
-            <div><div className="text-[10px] uppercase font-semibold text-stone-400 mb-1">Lessee — {view.client}</div>{ls?.dataUrl?<><img src={ls.dataUrl} alt="client signature" style={{height:48,maxWidth:"100%",objectFit:"contain"}}/><div className="text-[10px] text-stone-500 mt-1">Signed {fmtDateTime(ls.signedAt)}</div></>:<div className="text-xs text-stone-400 italic">Not signed — client signs at checkout</div>}</div>
+            <div><div className="text-[10px] uppercase font-semibold text-stone-400 mb-1">Lessor — {company.name||"BTOP Rentals"}</div>{lr?.dataUrl?<><img src={lr.dataUrl} alt="rep signature" style={{height:48,maxWidth:"100%",objectFit:"contain"}}/><div className="text-[10px] text-stone-500 mt-1">{lr.name||"Authorized Representative"} · {fmtDateTime(lr.signedAt)}</div></>:<><button onClick={()=>{company.repSignature?signContractAsBtop(live.id,company.repSignature):setRepSigModal(true)}} className="px-3 py-1.5 bg-blue-900 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5"><Pencil className="w-3 h-3"/>{company.repSignature?"Sign as BTOP":"Set up signature & sign"}</button>{!company.repSignature&&<div className="text-[10px] text-amber-600 mt-1">No representative signature configured yet — you'll set one up.</div>}</>}</div>
+            <div><div className="text-[10px] uppercase font-semibold text-stone-400 mb-1">Lessee — {live.client}</div>{ls?.dataUrl?<><img src={ls.dataUrl} alt="client signature" style={{height:48,maxWidth:"100%",objectFit:"contain"}}/><div className="text-[10px] text-stone-500 mt-1">Signed {fmtDateTime(ls.signedAt)}</div></>:<div className="text-xs text-stone-400 italic">Not signed — client signs at checkout</div>}</div>
           </div>
-          <div className="text-[10px] text-stone-400 mt-4 border-t pt-3">{view.footer}</div>
+          <div className="text-[10px] text-stone-400 mt-4 border-t pt-3">{live.footer}</div>
         </div>
       </div>
     </div>})()}
-    {repSigModal&&<SignaturePad title="Sign as BTOP representative" onClose={()=>setRepSigModal(false)} onSave={(d)=>{if(view)signAsBtop(view,d);if(setCompany&&!company.repSignature)setCompany(p=>({...p,repSignature:d,repName:p.repName||"Authorized Representative",repConsentAt:nowISO()}));setRepSigModal(false)}}/>}
+    {repSigModal&&view&&<SignaturePad title="Sign as BTOP representative" onClose={()=>setRepSigModal(false)} onSave={(d)=>{signContractAsBtop(view.id,d);if(setCompany&&!company.repSignature)setCompany(p=>({...p,repSignature:d,repName:p.repName||"Authorized Representative",repConsentAt:nowISO()}));setRepSigModal(false)}}/>}
   </div>;
 }
 
@@ -3463,6 +3472,8 @@ export default function App(){
   const [cartCode,setCartCode]=usePersistentState("btop_cartCode",null);
   const [contracts,setContracts]=usePersistentState("btop_contracts",[]);
   const [contractTpl,setContractTpl]=usePersistentState("btop_contractTpl",DEFAULT_CONTRACT_TPL);
+  /* Admin-configurable contract sending strictness: "both" | "client" | "none" */
+  const [contractPolicy,setContractPolicy]=usePersistentState("btop_contractPolicy",{sendWhen:"both"});
   /* Company profile — single source of truth for contact details (editable in Settings) */
   const [company,setCompany]=usePersistentState("btop_company",{name:"BTOP Rentals",address:"9807 Mines Rd #9, Laredo TX 78045",phone:"+1 469 690 712",email:"btoprentals@gmail.com",hours:"Mon–Fri 7AM–6PM · Sat 8AM–2PM"});
   /* Saved payment methods per client email (shared so checkout can prefill from the client's dashboard) */
@@ -3549,9 +3560,15 @@ export default function App(){
     return()=>clearInterval(iv);
   },[]);
 
-  /* Auto-generate the rental contract for a paid/approved order (idempotent: one per order) and "email" the PDF */
-  /* One contract per CART/purchase (group of order lines sharing gid), listing all items.
-     Lessee signature is stamped from the client's saved signature (they signed at checkout); Lessor is signed later by admin. */
+  /* Contract sending policy — how strict before the signed agreement is emailed to the client:
+     "both"   = require client + BTOP signatures (strictest, default)
+     "client" = require the client's signature
+     "none"   = send as soon as the agreement is issued (no signature required) */
+  const contractReady=(c)=>{const w=contractPolicy.sendWhen;if(w==="none")return true;if(w==="client")return !!c.lesseeSig?.dataUrl;return !!c.lesseeSig?.dataUrl&&!!c.lessorSig?.dataUrl;};
+  /* Log the agreement email (with PDF attachment) — represents the SMTP send once a backend is connected */
+  const logAgreementEmail=(c)=>setEmailLog(p=>[{id:"email-"+Date.now()+"-"+Math.random().toString(36).slice(2,6),sentAt:nowISO(),to:c.email||"",toName:c.client||"",oid:c.oid,invoice:c.oid,subject:`Your Rental Agreement ${c.contractNum} — BTOP Rentals`,greeting:`Hi ${c.client||"Customer"},`,body:`Please find attached your fully-signed Equipment Rental Agreement (${c.contractNum}) covering order(s) ${(c.orderNumbers||[c.oid]).join(", ")}, including the itemized equipment schedule (Exhibit A).`,footer:c.footer,attachment:`${c.contractNum}.pdf`},...p]);
+  /* One contract per CART/purchase (orders sharing gid). Lessee signature stamped from checkout; Lessor signed later by admin.
+     The agreement is only "sent" (emailed) when it satisfies the configured signing policy. */
   const sendContract=(groupOrders)=>{
     const arr=Array.isArray(groupOrders)?groupOrders:[groupOrders];
     if(!arr.length)return null;
@@ -3561,11 +3578,30 @@ export default function App(){
     const rep={...first,items,oid:arr.map(o=>o.oid).join(", "),approvedAt:first.approvedAt||nowISO()};
     const r=renderContract(contractTpl,rep,company);
     const ls=signaturesAll[first.ue];
-    const rec={id:genCode("CT"),gid,contractNum:r.contractNum,oid:first.oid,orderNumbers:arr.map(o=>o.oid),client:first.un,email:first.ue,createdAt:nowISO(),status:"sent",title:r.title,body:r.body,footer:r.footer,
-      lesseeSig:ls?.dataUrl?{dataUrl:ls.dataUrl,name:first.un,signedAt:nowISO()}:null,lessorSig:null};
+    const rec={id:genCode("CT"),gid,contractNum:r.contractNum,oid:first.oid,orderNumbers:arr.map(o=>o.oid),client:first.un,email:first.ue,createdAt:nowISO(),title:r.title,body:r.body,footer:r.footer,
+      lesseeSig:ls?.dataUrl?{dataUrl:ls.dataUrl,name:first.un,signedAt:nowISO()}:null,lessorSig:null,sent:false,sentAt:null};
+    const ready=contractReady(rec);
+    rec.sent=ready;rec.sentAt=ready?nowISO():null;
     setContracts(p=>p.some(c=>(c.gid||c.oid)===gid)?p:[rec,...p]);
-    setEmailLog(p=>[{id:"email-"+Date.now()+"-"+Math.random().toString(36).slice(2,6),sentAt:nowISO(),to:first.ue||"",toName:first.un||"",oid:first.oid,invoice:first.invNum||first.oid,subject:`Your Rental Agreement ${r.contractNum} — BTOP Rentals`,greeting:`Hi ${first.un||"Customer"},`,body:`Your payment has been approved. Please find attached your Equipment Rental Agreement (${r.contractNum}) covering order(s) ${arr.map(o=>o.oid).join(", ")}, including the itemized equipment schedule (Exhibit A).`,footer:r.footer,attachment:`${r.contractNum}.pdf`},...p]);
+    if(ready)logAgreementEmail(rec);
     return rec;
+  };
+  /* Admin presses "Sign as BTOP" on a contract → stamp Lessor signature; auto-send if the policy is now satisfied */
+  const signContractAsBtop=(id,dataUrl)=>{
+    const c=contracts.find(x=>x.id===id);if(!c)return;
+    const lessorSig={dataUrl,name:company.repName||"BTOP Representative",signedAt:nowISO()};
+    const upd={...c,lessorSig};
+    const willSend=!c.sent&&contractReady(upd);
+    setContracts(p=>p.map(x=>x.id===id?{...x,lessorSig,sent:x.sent||willSend,sentAt:x.sent?x.sentAt:(willSend?nowISO():x.sentAt)}:x));
+    if(willSend)logAgreementEmail(upd);
+    t(willSend?`Agreement ${c.contractNum} fully signed · emailed to ${c.email}`:`Signed as BTOP · agreement ${c.contractNum}`,"success");
+  };
+  /* Admin override — send the agreement now regardless of policy */
+  const sendAgreementNow=(id)=>{
+    const c=contracts.find(x=>x.id===id);if(!c||c.sent)return;
+    setContracts(p=>p.map(x=>x.id===id?{...x,sent:true,sentAt:nowISO()}:x));
+    logAgreementEmail(c);
+    t(`Agreement ${c.contractNum} emailed to ${c.email}`,"success");
   };
   /* Admin validates a manual payment → approve the WHOLE purchase group + one confirmation email + one contract */
   const approveOrder=(oid)=>{
@@ -3575,7 +3611,7 @@ export default function App(){
     setOrders(p=>p.map(x=>(x.gid||x.oid)===gid?{...x,status:"Confirmed",payState:"approved",approvedAt:at,expiresAt:null}:x));
     if(sendConfirmationEmail)sendConfirmationEmail(group[0]);
     const c=sendContract(group);
-    t(`Payment approved · agreement ${c?.contractNum||""} emailed to ${o.ue}`,"success");
+    t(c?.sent?`Payment approved · agreement ${c.contractNum} emailed to ${o.ue}`:`Payment approved · agreement ${c?.contractNum||""} issued (awaiting signatures before sending)`,"success");
   };
   const rejectOrder=(oid)=>{
     const o=orders.find(x=>x.oid===oid);const gid=o?(o.gid||o.oid):oid;
@@ -3753,7 +3789,7 @@ body{font-family:var(--f);background:var(--g0);color:var(--g9)}input,select,text
       {view==="register"&&<Re dr={doReg} sv={setView}/>}
       {view==="forgot"&&<Fo t={t} sv={setView}/>}
       {view==="book"&&<Bk fleet={fleet} ac={addCart} sv={setView} t={t} bookings={fleetBookings}/>}
-      {view==="admin"&&user?.role==="admin"&&<Ad fleet={fleet} sf={setFleet} spaces={spaces} setSpaces={setSpaces} contacts={contacts} setContacts={setContacts} orders={orders} setOrders={setOrders} t={t} sv={setView} messages={messages} setMessages={setMessages} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} logout={logout} alarmEnabled={alarmEnabled} setAlarmEnabled={setAlarmEnabled} alarmActive={alarmActive} setAlarmActive={setAlarmActive} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars} carts={carts} setCarts={setCarts} contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl} creditLines={creditLines} setCreditLines={setCreditLines} approveOrder={approveOrder} rejectOrder={rejectOrder} company={company} setCompany={setCompany} clientDocsAll={clientDocsAll} depositReturnAll={depositReturnAll} signaturesAll={signaturesAll} saveMySignature={saveMySignature} mySignature={mySignature}/>}
+      {view==="admin"&&user?.role==="admin"&&<Ad fleet={fleet} sf={setFleet} spaces={spaces} setSpaces={setSpaces} contacts={contacts} setContacts={setContacts} orders={orders} setOrders={setOrders} t={t} sv={setView} messages={messages} setMessages={setMessages} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} logout={logout} alarmEnabled={alarmEnabled} setAlarmEnabled={setAlarmEnabled} alarmActive={alarmActive} setAlarmActive={setAlarmActive} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars} carts={carts} setCarts={setCarts} contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl} creditLines={creditLines} setCreditLines={setCreditLines} approveOrder={approveOrder} rejectOrder={rejectOrder} company={company} setCompany={setCompany} clientDocsAll={clientDocsAll} depositReturnAll={depositReturnAll} signaturesAll={signaturesAll} saveMySignature={saveMySignature} mySignature={mySignature} contractPolicy={contractPolicy} setContractPolicy={setContractPolicy} signContractAsBtop={signContractAsBtop} sendAgreementNow={sendAgreementNow}/>}
       {view==="hqfield"&&(user?.role==="sede"||user?.role==="admin")&&<FieldHQ fleet={fleet} spaces={spaces} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} user={user} sv={setView} logout={logout}/>}
       {view==="checkout"&&user&&<CheckoutPage cart={cart} rmCart={rmCart} cTotal={cTotal} user={user} confirm={confirmOrder} cancel={()=>setView("home")} sv={setView} company={company} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} creditUsed={orders.filter(o=>(o.payMethod==="credit"||o.payMethod==="invoice")&&o.ue===user.email&&o.status!=="Cancelled"&&!o.settlementPaid).reduce((s,o)=>s+(o.tp||0),0)} savedPays={savedPays} mySignature={mySignature} saveMySignature={saveMySignature}/>}
       {view==="client"&&user?.role==="client"&&<Cl orders={orders.filter(o=>o.ue===user.email)} sv={setView} user={user} contacts={contacts} setContacts={setContacts} logout={logout} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} orders_all={orders} savedPays={savedPays} setSavedPays={setSavedPays} t={t} clientDocs={clientDocs} addClientDoc={addClientDoc} removeClientDoc={removeClientDoc} depositReturnPref={depositReturnPref} setDepositReturnPref={setDepositReturnPref} mySignature={mySignature} saveMySignature={saveMySignature}/>}
@@ -4819,7 +4855,7 @@ function Fo({t,sv}){const [em,sem]=useState("");const [sent,ss]=useState(false);
 }
 
 /* ═══════ ADMIN ═══════ */
-function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,setMessages,deliveries,setDeliveries,bookings,setBookings,orders,setOrders,logout,alarmEnabled,setAlarmEnabled,alarmActive,setAlarmActive,emailTemplate,setEmailTemplate,emailLog,sendConfirmationEmail,renderEmailVars,carts,setCarts,contracts,setContracts,contractTpl,setContractTpl,creditLines,setCreditLines,approveOrder,rejectOrder,company,setCompany,clientDocsAll,depositReturnAll,signaturesAll,saveMySignature,mySignature}){
+function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,setMessages,deliveries,setDeliveries,bookings,setBookings,orders,setOrders,logout,alarmEnabled,setAlarmEnabled,alarmActive,setAlarmActive,emailTemplate,setEmailTemplate,emailLog,sendConfirmationEmail,renderEmailVars,carts,setCarts,contracts,setContracts,contractTpl,setContractTpl,creditLines,setCreditLines,approveOrder,rejectOrder,company,setCompany,clientDocsAll,depositReturnAll,signaturesAll,saveMySignature,mySignature,contractPolicy,setContractPolicy,signContractAsBtop,sendAgreementNow}){
   const [section,setSection]=useState("dash");
   /* Clear alarm when admin opens a section where the new order is visible */
   useEffect(()=>{
@@ -4941,7 +4977,7 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
           {section==="carts"&&<CartsMod carts={carts} setCarts={setCarts} contacts={contacts}/>}
           {section==="orderspay"&&<OrdersPayMod orders={orders} setOrders={setOrders} approveOrder={approveOrder} rejectOrder={rejectOrder}/>}
           {section==="credit"&&<CreditMod creditLines={creditLines} setCreditLines={setCreditLines} orders={orders} contacts={contacts}/>}
-          {section==="contracts"&&<ContractsMod contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl} signaturesAll={signaturesAll} company={company} setCompany={setCompany}/>}
+          {section==="contracts"&&<ContractsMod contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl} signaturesAll={signaturesAll} company={company} setCompany={setCompany} contractPolicy={contractPolicy} setContractPolicy={setContractPolicy} signContractAsBtop={signContractAsBtop} sendAgreementNow={sendAgreementNow}/>}
           {section==="posts"&&<PostsMod/>}
           {section==="messages"&&<MessagesMod messages={messages} setMessages={setMessages}/>}
           {section==="pay"&&<PayMod/>}
