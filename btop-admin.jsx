@@ -1589,7 +1589,7 @@ function BookingsMod(){
 }
 
 /* ═══ CONTACTS ═══ */
-function ContactsMod({contacts:propContacts,setContacts:propSetContacts,orders=[]}){
+function ContactsMod({contacts:propContacts,setContacts:propSetContacts,orders=[],clientDocsAll={}}){
   const [q,setQ]=useState("");
   /* Use props if provided (single source of truth from App), otherwise fallback to local state */
   const [localContacts,setLocalContacts]=useState(admSeedContacts);
@@ -1730,6 +1730,18 @@ function ContactsMod({contacts:propContacts,setContacts:propSetContacts,orders=[
                 </div>)}
               </div>
             </div>
+
+            {/* CLIENT DOCUMENTS — uploaded by the client, viewable + downloadable by admin */}
+            {(()=>{const docs=clientDocsAll[viewing.email]||[];return <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-stone-200 bg-stone-50"><h4 className="font-bold text-sm flex items-center gap-2">📁 Documents ({docs.length})</h4></div>
+              <div className="p-4">
+                {docs.length===0?<p className="text-xs text-stone-500">No documents uploaded by this client yet.</p>
+                :<div className="space-y-2">{docs.map(doc=><div key={doc.id} className="flex items-center justify-between gap-3 p-2.5 bg-stone-50 rounded-lg">
+                  <div className="min-w-0"><div className="text-sm font-semibold text-stone-800 truncate">📄 {doc.name}</div><div className="text-[10px] text-stone-400 uppercase">{doc.category} · {new Date(doc.uploadedAt).toLocaleDateString()}</div></div>
+                  <button onClick={()=>downloadDoc(doc)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1 shrink-0"><Download className="w-3.5 h-3.5"/>Download</button>
+                </div>)}</div>}
+              </div>
+            </div>})()}
 
             {/* PASSWORD SECTION */}
             <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
@@ -2784,6 +2796,15 @@ function printContract(c){
   const w=window.open("","_blank","width=820,height=1000");if(w){w.document.write(html);w.document.close();setTimeout(()=>{try{w.print()}catch(e){}},500);}
 }
 
+/* Download a stored client document (data URL kept for small files; otherwise a metadata stub) */
+function downloadDoc(doc){
+  try{
+    const a=document.createElement("a");
+    a.href=doc.dataUrl||("data:text/plain;charset=utf-8,"+encodeURIComponent(`Document: ${doc.name}\nCategory: ${doc.category}\nUploaded: ${doc.uploadedAt}\n\n(Original file is stored on the server in the production build.)`));
+    a.download=doc.name||"document";a.click();
+  }catch(e){}
+}
+
 /* ═══ ADMIN · LIVE CARTS (who / when / what · search by cart code) ═══ */
 function CartsMod({carts,setCarts,contacts=[]}){
   const [q,setQ]=useState("");
@@ -3213,6 +3234,11 @@ export default function App(){
   const [savedPaysAll,setSavedPaysAll]=usePersistentState("btop_savedPays",{"cliente@test.com":[{id:1,type:"card",label:"Visa •••• 4242",nameOnCard:"Test Client",isDefault:true,status:"active"},{id:2,type:"cash",label:"Cash on Pickup",cashName:"Test Client",cashPhone:"(469) 555-0150",isDefault:false,status:"active"}]});
   const savedPays=user?(savedPaysAll[user.email]||[]):[];
   const setSavedPays=(updater)=>{if(!user)return;setSavedPaysAll(prev=>{const cur=prev[user.email]||[];const next=typeof updater==="function"?updater(cur):updater;return{...prev,[user.email]:next}})};
+  /* Client documents (uploaded by client, visible + downloadable by admin) — keyed by email */
+  const [clientDocsAll,setClientDocsAll]=usePersistentState("btop_clientDocs",{});
+  const clientDocs=user?(clientDocsAll[user.email]||[]):[];
+  const addClientDoc=(doc)=>{if(!user)return;setClientDocsAll(prev=>({...prev,[user.email]:[...(prev[user.email]||[]),doc]}))};
+  const removeClientDoc=(id)=>{if(!user)return;setClientDocsAll(prev=>({...prev,[user.email]:(prev[user.email]||[]).filter(d=>d.id!==id)}))};
   const [creditLines,setCreditLines]=usePersistentState("btop_creditLines_v2",[
     /* Seed credit lines tied to real demo clients (admSeedContacts) */
     {id:"CL-DEMO1",clientName:"Roberto Perez",email:"roberto@email.com",limit:15000,terms:30,grantedAt:"2026-05-01T00:00:00.000Z",active:true},
@@ -3472,10 +3498,10 @@ body{font-family:var(--f);background:var(--g0);color:var(--g9)}input,select,text
       {view==="register"&&<Re dr={doReg} sv={setView}/>}
       {view==="forgot"&&<Fo t={t} sv={setView}/>}
       {view==="book"&&<Bk fleet={fleet} ac={addCart} sv={setView} t={t} bookings={fleetBookings}/>}
-      {view==="admin"&&user?.role==="admin"&&<Ad fleet={fleet} sf={setFleet} spaces={spaces} setSpaces={setSpaces} contacts={contacts} setContacts={setContacts} orders={orders} setOrders={setOrders} t={t} sv={setView} messages={messages} setMessages={setMessages} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} logout={logout} alarmEnabled={alarmEnabled} setAlarmEnabled={setAlarmEnabled} alarmActive={alarmActive} setAlarmActive={setAlarmActive} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars} carts={carts} setCarts={setCarts} contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl} creditLines={creditLines} setCreditLines={setCreditLines} approveOrder={approveOrder} rejectOrder={rejectOrder} company={company} setCompany={setCompany}/>}
+      {view==="admin"&&user?.role==="admin"&&<Ad fleet={fleet} sf={setFleet} spaces={spaces} setSpaces={setSpaces} contacts={contacts} setContacts={setContacts} orders={orders} setOrders={setOrders} t={t} sv={setView} messages={messages} setMessages={setMessages} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} logout={logout} alarmEnabled={alarmEnabled} setAlarmEnabled={setAlarmEnabled} alarmActive={alarmActive} setAlarmActive={setAlarmActive} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars} carts={carts} setCarts={setCarts} contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl} creditLines={creditLines} setCreditLines={setCreditLines} approveOrder={approveOrder} rejectOrder={rejectOrder} company={company} setCompany={setCompany} clientDocsAll={clientDocsAll}/>}
       {view==="hqfield"&&(user?.role==="sede"||user?.role==="admin")&&<FieldHQ fleet={fleet} spaces={spaces} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} user={user} sv={setView} logout={logout}/>}
       {view==="checkout"&&user&&<CheckoutPage cart={cart} rmCart={rmCart} cTotal={cTotal} user={user} confirm={confirmOrder} cancel={()=>setView("home")} sv={setView} company={company} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} creditUsed={orders.filter(o=>(o.payMethod==="credit"||o.payMethod==="invoice")&&o.ue===user.email&&o.status!=="Cancelled"&&!o.settlementPaid).reduce((s,o)=>s+(o.tp||0),0)} savedPays={savedPays}/>}
-      {view==="client"&&user?.role==="client"&&<Cl orders={orders.filter(o=>o.ue===user.email)} sv={setView} user={user} contacts={contacts} setContacts={setContacts} logout={logout} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} orders_all={orders} savedPays={savedPays} setSavedPays={setSavedPays} t={t}/>}
+      {view==="client"&&user?.role==="client"&&<Cl orders={orders.filter(o=>o.ue===user.email)} sv={setView} user={user} contacts={contacts} setContacts={setContacts} logout={logout} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} orders_all={orders} savedPays={savedPays} setSavedPays={setSavedPays} t={t} clientDocs={clientDocs} addClientDoc={addClientDoc} removeClientDoc={removeClientDoc}/>}
     </main>
 
     {/* SLIDE-OUT CART */}
@@ -4503,7 +4529,7 @@ function Fo({t,sv}){const [em,sem]=useState("");const [sent,ss]=useState(false);
 }
 
 /* ═══════ ADMIN ═══════ */
-function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,setMessages,deliveries,setDeliveries,bookings,setBookings,orders,setOrders,logout,alarmEnabled,setAlarmEnabled,alarmActive,setAlarmActive,emailTemplate,setEmailTemplate,emailLog,sendConfirmationEmail,renderEmailVars,carts,setCarts,contracts,setContracts,contractTpl,setContractTpl,creditLines,setCreditLines,approveOrder,rejectOrder,company,setCompany}){
+function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,setMessages,deliveries,setDeliveries,bookings,setBookings,orders,setOrders,logout,alarmEnabled,setAlarmEnabled,alarmActive,setAlarmActive,emailTemplate,setEmailTemplate,emailLog,sendConfirmationEmail,renderEmailVars,carts,setCarts,contracts,setContracts,contractTpl,setContractTpl,creditLines,setCreditLines,approveOrder,rejectOrder,company,setCompany,clientDocsAll}){
   const [section,setSection]=useState("dash");
   /* Clear alarm when admin opens a section where the new order is visible */
   useEffect(()=>{
@@ -4621,7 +4647,7 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
           {section==="bookings"&&<BookingsMod/>}
           {section==="reservations"&&<ReservationsMod orders={orders} setOrders={setOrders} fleetBookings={bookings} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars}/>}
           {section==="settlement"&&<SettlementMod orders={orders} setOrders={setOrders} deliveries={deliveries} fleet={fleet}/>}
-          {section==="contacts"&&<ContactsMod contacts={contacts} setContacts={setContacts} orders={orders}/>}
+          {section==="contacts"&&<ContactsMod contacts={contacts} setContacts={setContacts} orders={orders} clientDocsAll={clientDocsAll}/>}
           {section==="carts"&&<CartsMod carts={carts} setCarts={setCarts} contacts={contacts}/>}
           {section==="orderspay"&&<OrdersPayMod orders={orders} setOrders={setOrders} approveOrder={approveOrder} rejectOrder={rejectOrder}/>}
           {section==="credit"&&<CreditMod creditLines={creditLines} setCreditLines={setCreditLines} orders={orders} contacts={contacts}/>}
@@ -4650,7 +4676,7 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
   );
 }
 
-function Cl({orders,sv,user,contacts=[],setContacts,logout,creditLine,orders_all=[],savedPays=[],setSavedPays,t}){
+function Cl({orders,sv,user,contacts=[],setContacts,logout,creditLine,orders_all=[],savedPays=[],setSavedPays,t,clientDocs=[],addClientDoc,removeClientDoc}){
   const [tab,sTab]=useState("info");
   const [editing,sEditing]=useState(false);
   const [prof,sProf]=useState({
@@ -4943,18 +4969,30 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout,creditLine,orders_all
 
       {/* ── DOCUMENTOS ── */}
       {tab==="docs"&&<div>
-        <h2 style={{fontWeight:800,fontSize:20,color:"var(--navy)",marginBottom:20}}>Documents</h2>
+        <h2 style={{fontWeight:800,fontSize:20,color:"var(--navy)",marginBottom:6}}>Documents</h2>
+        <p style={{fontSize:13,color:"var(--g5)",marginBottom:20}}>Upload your verification documents. BTOP staff can view and download these to process your rentals.</p>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
-          {[["Driver's License","Required if renting without a driver","license"],["Insurance Certificate","Your own insurance (if applicable)","insurance"],["Signed Contracts","Rental agreements","contracts"]].map(([t,d,k])=><div key={k} style={{padding:20,background:"var(--g0)",borderRadius:14,border:"2px dashed var(--g2)"}}>
+          {[["Driver's License","Required for rental contracts","license"],["Insurance Certificate","Your own insurance (if applicable)","insurance"],["Other / Business Docs","EIN letter, W-9, etc.","other"]].map(([title,d,k])=>{
+            const mine=clientDocs.filter(x=>x.category===k);
+            const onPick=(e)=>{const f=e.target.files&&e.target.files[0];if(!f||!addClientDoc)return;const base={id:"doc-"+Date.now(),name:f.name,category:k,size:f.size,uploadedAt:new Date().toISOString()};
+              if(f.size<1500000){const r=new FileReader();r.onload=()=>{addClientDoc({...base,dataUrl:r.result});t&&t("Document uploaded","success")};r.readAsDataURL(f);}
+              else{addClientDoc(base);t&&t("Document uploaded (large file: metadata only in demo)","success");}
+              e.target.value="";};
+            return <div key={k} style={{padding:20,background:"var(--g0)",borderRadius:14,border:"2px dashed var(--g2)"}}>
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
               <div style={{width:40,height:40,borderRadius:10,background:"var(--b1)",display:"flex",alignItems:"center",justifyContent:"center"}}><X n="list" s={20} c="var(--b6)"/></div>
-              <div><div style={{fontWeight:700,fontSize:14,color:"var(--navy)"}}>{t}</div><div style={{fontSize:12,color:"var(--g5)"}}>{d}</div></div>
+              <div><div style={{fontWeight:700,fontSize:14,color:"var(--navy)"}}>{title}</div><div style={{fontSize:12,color:"var(--g5)"}}>{d}</div></div>
             </div>
-            <div style={{textAlign:"center",padding:20,background:"#fff",borderRadius:10,border:"1px solid var(--g2)",cursor:"pointer"}}>
+            {mine.map(doc=><div key={doc.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"8px 10px",background:"#fff",borderRadius:8,border:"1px solid var(--g2)",marginBottom:6}}>
+              <span style={{fontSize:12,fontWeight:600,color:"var(--navy)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📄 {doc.name}</span>
+              <span style={{display:"flex",gap:6,flexShrink:0}}><button onClick={()=>downloadDoc(doc)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--b6)"}}><X n="arr" s={14}/></button><button onClick={()=>removeClientDoc&&removeClientDoc(doc.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--red)"}}><X n="trash" s={14}/></button></span>
+            </div>)}
+            <label style={{display:"block",textAlign:"center",padding:16,background:"#fff",borderRadius:10,border:"1px solid var(--g2)",cursor:"pointer"}}>
               <X n="arr" s={20} c="var(--g3)"/>
               <div style={{fontSize:13,color:"var(--g5)",marginTop:4}}>Click to upload</div>
-            </div>
-          </div>)}
+              <input type="file" accept="image/*,application/pdf" onChange={onPick} style={{display:"none"}}/>
+            </label>
+          </div>})}
         </div>
       </div>}
 
