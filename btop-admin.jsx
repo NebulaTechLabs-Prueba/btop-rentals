@@ -18,9 +18,9 @@ const FLEET = [
   { id:"1212", name:"GMC 3500 Box Truck", year:2020, type:"16ft", cat:"Box Truck", daily:60, weekly:300, monthly:1300, rateMile:0.15, depD:100, depW:150, depM:500, img:"🚐", desc:"16ft box truck, perfect for moving & deliveries." },
 ];
 const USERS_INIT = [
-  { email:"admin@btop.com", pw:"admin123", role:"admin", name:"Admin BTOP" },
-  { email:"cliente@test.com", pw:"test123", role:"client", name:"Juan Perez" },
-  { email:"sede@btop.com", pw:"sede123", role:"sede", name:"Headquarters Agent" },
+  { email:"admin@btop.com", pw:"admin123", role:"admin", name:"Admin BTOP", phone:"+1 469 690 712" },
+  { email:"cliente@test.com", pw:"test123", role:"client", name:"Test Client", phone:"(469) 555-0150" },
+  { email:"sede@btop.com", pw:"sede123", role:"sede", name:"Headquarters Agent", phone:"(469) 555-0199" },
 ];
 
 
@@ -2926,6 +2926,7 @@ function OrdersPayMod({orders,setOrders,approveOrder,rejectOrder}){
               <div><span className="text-stone-400">Sender:</span> {o.payDetail.zelleFrom||"—"}</div>
               <div><span className="text-stone-400">Account holder:</span> {o.payDetail.zelleName||"—"}</div>
               <div><span className="text-stone-400">Amount:</span> ${o.payDetail.zelleAmount||"—"}</div>
+              <div><span className="text-stone-400">Payment date:</span> {o.payDetail.zelleDate||"—"}{o.payDetail.zelleTime?` ${o.payDetail.zelleTime}`:""}</div>
               <div><span className="text-stone-400">Proof:</span> {o.payDetail.zelleProof?<span className="text-emerald-700 font-semibold">📎 {o.payDetail.zelleProof}</span>:<span className="text-red-600">not attached</span>}</div>
             </div>}
             {o.payMethod==="cash"&&<div className="p-3 bg-stone-50 rounded-xl text-xs"><div className="font-semibold text-stone-700 uppercase mb-1">Cash / Check</div><p>Customer to coordinate payment at the office. Direct line: <strong>{SUPPORT.phone}</strong>. Approve once payment is received.</p></div>}
@@ -3037,6 +3038,17 @@ function ContractsMod({contracts,setContracts,contractTpl,setContractTpl}){
   const [tab,setTab]=useState("list");
   const [draft,setDraft]=useState(contractTpl);
   const [view,setView]=useState(null);
+  const [q,setQ]=useState("");
+  const [from,setFrom]=useState("");
+  const [to,setTo]=useState("");
+  const ql=q.trim().toLowerCase();
+  const filtered=contracts.filter(c=>{
+    if(ql&&!([c.contractNum,c.oid,c.client,c.email].some(v=>(v||"").toLowerCase().includes(ql))))return false;
+    const d=(c.createdAt||"").slice(0,10);
+    if(from&&d<from)return false;
+    if(to&&d>to)return false;
+    return true;
+  });
   /* Human-readable field names — each chip inserts the underlying placeholder, auto-filled per order */
   const FIELDS=[
     ["contract_number","Agreement No."],["order_number","Order No."],["issue_date","Issue Date"],
@@ -3050,9 +3062,17 @@ function ContractsMod({contracts,setContracts,contractTpl,setContractTpl}){
     <div className="flex items-center gap-1 bg-white border border-stone-200 rounded-full p-1 mb-6 w-fit">
       {[["list","Issued contracts"],["tpl","Template"]].map(([k,l])=><button key={k} onClick={()=>setTab(k)} className={`px-4 py-2 rounded-full text-sm font-medium ${tab===k?"bg-blue-900 text-white":"text-stone-600"}`}>{l}</button>)}
     </div>
-    {tab==="list"&&<SC title={`Contracts (${contracts.length})`} padded={false}>
-      {contracts.length===0?<div className="text-center py-16 text-stone-400"><FileText className="w-8 h-8 mx-auto mb-2"/><p>No contracts yet. They are issued when a payment is approved.</p></div>
-      :<DT headers={["Agreement No.","Order","Client","Issued","Status",""]} rows={contracts.map(c=>[
+    {tab==="list"&&<>
+    <div className="bg-white border border-stone-200 rounded-2xl p-4 mb-4 flex flex-wrap gap-3 items-center">
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 Search by agreement #, order #, client or email..." className="flex-1 min-w-[260px] px-3 py-2 border border-stone-200 rounded-lg text-sm"/>
+      <label className="text-xs text-stone-500">From <input type="date" value={from} onChange={e=>setFrom(e.target.value)} className="ml-1 px-2 py-1.5 border border-stone-200 rounded-lg text-sm"/></label>
+      <label className="text-xs text-stone-500">To <input type="date" value={to} onChange={e=>setTo(e.target.value)} className="ml-1 px-2 py-1.5 border border-stone-200 rounded-lg text-sm"/></label>
+      {(q||from||to)&&<button onClick={()=>{setQ("");setFrom("");setTo("")}} className="px-3 py-2 border border-stone-200 rounded-lg text-xs font-semibold text-stone-600">✕ Clear</button>}
+      <span className="text-xs text-stone-500 ml-auto">{filtered.length} of {contracts.length}</span>
+    </div>
+    <SC title={`Contracts (${filtered.length})`} padded={false}>
+      {filtered.length===0?<div className="text-center py-16 text-stone-400"><FileText className="w-8 h-8 mx-auto mb-2"/><p>{contracts.length===0?"No contracts yet. They are issued when a payment is approved.":"No contracts match your search."}</p></div>
+      :<DT headers={["Agreement No.","Order","Client","Issued","Status",""]} rows={filtered.map(c=>[
         <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded">{c.contractNum}</span>,
         <span className="font-mono text-xs">{c.oid}</span>,
         <div><div className="font-semibold text-sm">{c.client}</div><div className="text-[10px] text-stone-400">{c.email}</div></div>,
@@ -3060,7 +3080,7 @@ function ContractsMod({contracts,setContracts,contractTpl,setContractTpl}){
         <Pill tone="blue">📧 Emailed</Pill>,
         <div className="flex gap-1"><button onClick={()=>setView(c)} className="p-1.5 hover:bg-stone-100 rounded-lg"><Eye className="w-3.5 h-3.5"/></button><button onClick={()=>printContract(c)} className="p-1.5 hover:bg-blue-50 text-blue-700 rounded-lg" title="Save as PDF"><Download className="w-3.5 h-3.5"/></button></div>,
       ])}/>}
-    </SC>}
+    </SC></>}
     {tab==="tpl"&&<div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <SC title="Template editor">
         <div className="space-y-3">
@@ -3366,7 +3386,10 @@ export default function App(){
     if(contact&&contact.disabled){t("This account has been disabled. Please contact a BTOP advisor to reactivate it.","error");return false}
     setUser(f);return true;
   };
-  const doReg=(name,email,pw)=>{if(users.find(u=>u.email===email)){t("Email exists","error");return false}const nu={email,pw,role:"client",name};setUsers(p=>[...p,nu]);setUser(nu);t("Account created!");return true};
+  const doReg=(name,email,pw,phone="")=>{if(users.find(u=>u.email===email)){t("Email exists","error");return false}const nu={email,pw,role:"client",name,phone};setUsers(p=>[...p,nu]);setUser(nu);
+    /* Mirror new client into the contacts directory so admin sees them (with phone/email for contact) */
+    if(setContacts)setContacts(p=>p.find(c=>c.email===email)?p:[...p,{id:"c"+Date.now(),name,email,phone,city:"",company:"",idDoc:"",registered:new Date().toISOString().split("T")[0],lastOrder:"",totalSpent:0,orders:0}]);
+    t("Account created!");return true};
   const logout=()=>{setUser(null);setView("home")};
 
   const css=`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Space+Mono:wght@400;700&display=swap');
@@ -4152,7 +4175,7 @@ function Ct({cart,rm,co,total,sv,user,dl,dr}){
 function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv}){
   const [payMethod,setPayMethod]=useState("card");
   const [payDetail,setPayDetail]=useState({
-    /* Zelle */zelleFrom:"",zelleName:"",zelleAmount:"",zelleReceipt:false,zelleTime:"",zelleProof:"",
+    /* Zelle */zelleFrom:"",zelleName:"",zelleAmount:"",zelleReceipt:false,zelleDate:"",zelleTime:"",zelleProof:"",
     /* Cash */cashName:"",cashPhone:"",cashConfirm:false,cashTime:"",
     /* Invoice */invCompany:"",invTaxId:"",invBillEmail:"",invContact:"",invPhone:"",invAddress:"",invPO:"",
   });
@@ -4297,8 +4320,9 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv}){
               <div className="ig"><label>Email or Phone (sender) *</label><input className="inf" value={payDetail.zelleFrom} onChange={e=>upPay("zelleFrom",e.target.value)} placeholder="Your Zelle email or phone"/></div>
               <div className="ig"><label>Account Holder Name *</label><input className="inf" value={payDetail.zelleName} onChange={e=>upPay("zelleName",e.target.value)} placeholder="Full name on account"/></div>
             </div>
+            <div className="ig"><label>Amount Sent *</label><input className="inf" value={payDetail.zelleAmount||totalDep.toFixed(2)} onChange={e=>upPay("zelleAmount",e.target.value)} placeholder={totalDep.toFixed(2)}/></div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              <div className="ig"><label>Amount Sent *</label><input className="inf" value={payDetail.zelleAmount||totalDep.toFixed(2)} onChange={e=>upPay("zelleAmount",e.target.value)} placeholder={totalDep.toFixed(2)}/></div>
+              <div className="ig"><label>Date of Payment *</label><input className="inf" type="date" value={payDetail.zelleDate} onChange={e=>upPay("zelleDate",e.target.value)}/></div>
               <div className="ig"><label>Time of Transfer</label><input className="inf" type="time" value={payDetail.zelleTime} onChange={e=>upPay("zelleTime",e.target.value)}/></div>
             </div>
             <div className="ig"><label>Payment receipt (attachment) *</label>
@@ -4398,14 +4422,23 @@ function Lo({dl,sv}){const [em,sem]=useState("");const [pw,spw]=useState("");con
     </div>
   </div>;
 }
-function Re({dr,sv}){const [nm,snm]=useState("");const [em,sem]=useState("");const [pw,spw]=useState("");const [pw2,spw2]=useState("");const [depMethod,setDepMethod]=useState("bank");const [depInfo,setDepInfo]=useState("");const go=()=>{if(!nm||!em||!pw||pw!==pw2)return;if(dr(nm,em,pw))sv("home")};
+function Re({dr,sv}){const [nm,snm]=useState("");const [em,sem]=useState("");const [ph,sph]=useState("");const [pw,spw]=useState("");const [pw2,spw2]=useState("");const [err,sErr]=useState("");const [depMethod,setDepMethod]=useState("bank");const [depInfo,setDepInfo]=useState("");
+  const go=()=>{
+    if(!nm.trim()){sErr("Full name is required");return}
+    if(!em.trim()){sErr("Email is required");return}
+    if(!ph.trim()){sErr("Phone number is required");return}
+    if(pw.length<8){sErr("Password must be at least 8 characters");return}
+    if(pw!==pw2){sErr("Passwords do not match");return}
+    sErr("");if(dr(nm,em,pw,ph))sv("home");
+  };
   return <div className="fi" style={{minHeight:"80vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"linear-gradient(135deg,var(--b0),var(--g0))"}}>
     <div className="cd" style={{maxWidth:500,width:"100%",padding:40}}>
       <div style={{textAlign:"center",marginBottom:32}}><div style={{width:60,height:60,borderRadius:16,background:"linear-gradient(135deg,var(--b6),var(--b4))",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><X n="user" s={28} c="#fff"/></div><h2 style={{fontSize:24,fontWeight:800,color:"var(--navy)"}}>Create Account</h2></div>
       <div style={{display:"flex",flexDirection:"column",gap:16}}>
         <div className="ig"><label>Full Name *</label><input className="inf" value={nm} onChange={e=>snm(e.target.value)} placeholder="John Doe"/></div>
-        <div className="ig"><label>Email *</label><input className="inf" type="email" value={em} onChange={e=>sem(e.target.value)} placeholder="you@email.com"/></div>
+        <div style={{display:"flex",gap:12}}><div className="ig" style={{flex:1}}><label>Email *</label><input className="inf" type="email" value={em} onChange={e=>sem(e.target.value)} placeholder="you@email.com"/></div><div className="ig" style={{flex:1}}><label>Phone *</label><input className="inf" type="tel" value={ph} onChange={e=>sph(e.target.value)} placeholder="(469) 000-0000"/></div></div>
         <div style={{display:"flex",gap:12}}><div className="ig" style={{flex:1}}><label>Password *</label><input className="inf" type="password" value={pw} onChange={e=>spw(e.target.value)} placeholder="Min 8 chars"/></div><div className="ig" style={{flex:1}}><label>Confirm *</label><input className="inf" type="password" value={pw2} onChange={e=>spw2(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}/></div></div>
+        {err&&<div style={{padding:"10px 14px",borderRadius:10,fontSize:13,fontWeight:600,background:"rgba(220,38,38,.1)",color:"var(--red)"}}>{err}</div>}
         <div style={{borderTop:"1px solid var(--g2)",paddingTop:16,marginTop:4}}>
           <div style={{fontWeight:700,fontSize:14,color:"var(--navy)",marginBottom:4}}>Deposit Return Method</div>
           <p style={{fontSize:12,color:"var(--g5)",marginBottom:12}}>Where should we send your security deposit after rental completion?</p>
@@ -4583,11 +4616,9 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout}){
   const [tab,sTab]=useState("info");
   const [editing,sEditing]=useState(false);
   const [prof,sProf]=useState({
-    first:user.name.split(" ")[0]||"",last:user.name.split(" ").slice(1).join(" ")||"",email:user.email,phone:"",country:"US",city:"Laredo",idDoc:"",
-    isCompany:false,compName:"",compType:"",taxId:"",compAddr:"",compContact:"",
-    prefTruck:"box",prefFreq:"monthly",svcDriver:false,svcInsurance:false,svcGPS:false,svcRoadside:false,
-    cargoType:"",cargoWeight:"",cargoVolume:"",cargoRefrig:false,cargoSecurity:false,cargoSpecial:false,
-    notifChannel:"email",notifReturn:true,notifExpiry:true,notifCargo:false,notifIncident:true
+    first:user.name.split(" ")[0]||"",last:user.name.split(" ").slice(1).join(" ")||"",email:user.email,phone:user.phone||"",country:"US",city:"Laredo",state:"TX",idDoc:"",
+    isCompany:false,compLegalName:"",compDBA:"",compType:"LLC",ein:"",compState:"TX",compAddr:"",compContact:"",compPhone:"",compEmail:"",
+    notifChannel:"email",notifPayValidated:true,notifPayRejected:true,notifCredit:true,notifRentalDeadline:true,notifReturn:true,notifIncident:true
   });
   const [pays,sPays]=useState([{id:1,type:"card",label:"Visa •••• 4242",isDefault:true,status:"active"},{id:2,type:"cash",label:"Cash on Pickup",isDefault:false,status:"active",cashName:"",cashPhone:"",cashConfirm:false}]);
   const [payView,sPayView]=useState("list"); // list | add-card | add-cash
@@ -4598,7 +4629,6 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout}){
   const [depositReturn,setDepositReturn]=useState({method:"bank",bankName:"",routingNumber:"",accountNumber:"",paypalEmail:"",zelleEmail:"",cashPickup:false});
   const [pw,sPw]=useState({current:"",newPw:"",confirm:""});
   const [pwMsg,sPwMsg]=useState(null);
-  const [twoFA,s2FA]=useState(false);
   const [delModal,setDelModal]=useState(false);
   const [delConfirmEmail,setDelConfirmEmail]=useState("");
 
@@ -4667,35 +4697,13 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout}){
           </div>
           <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:12}}>
             <F l="Country" v={prof.country} k="country" opts={[["US","United States"],["MX","Mexico"],["CA","Canada"],["OTHER","Other"]]}/>
+            <F l="State" v={prof.state} k="state" ph="TX"/>
             <F l="City" v={prof.city} k="city" ph="Laredo"/>
-            <F l="ID / License #" v={prof.idDoc} k="idDoc" ph="Optional"/>
           </div>
-        </S>
-        <S l="Service Preferences">
-          <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:16}}>
-            <F l="Preferred Truck" v={prof.prefTruck} k="prefTruck" opts={[["box","Box Truck"],["semi","Semi Truck"],["pickup","Pickup"],["trailer","Trailer"],["forklift","Forklift"],["any","Any"]]}/>
-            <F l="Usage Frequency" v={prof.prefFreq} k="prefFreq" opts={[["daily","Daily"],["weekly","Weekly"],["monthly","Monthly"],["occasional","Occasional"]]}/>
+          <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:12}}>
+            <F l="Driver's License / ID #" v={prof.idDoc} k="idDoc" ph="Required for rental contracts"/>
           </div>
-          <div style={{fontSize:13,fontWeight:600,color:"var(--g7)",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Additional Services</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:8}}>
-            <Chk l="Driver Included" k="svcDriver"/>
-            <Chk l="Cargo Insurance" k="svcInsurance"/>
-            <Chk l="GPS Tracking" k="svcGPS"/>
-            <Chk l="Roadside Assistance" k="svcRoadside"/>
-          </div>
-        </S>
-        <S l="Cargo Information">
-          <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:12}}>
-            <F l="Cargo Type" v={prof.cargoType} k="cargoType" ph="e.g. General Freight"/>
-            <F l="Avg Weight (lbs)" v={prof.cargoWeight} k="cargoWeight" ph="e.g. 5000"/>
-            <F l="Avg Volume (ft³)" v={prof.cargoVolume} k="cargoVolume" ph="e.g. 800"/>
-          </div>
-          <div style={{fontSize:13,fontWeight:600,color:"var(--g7)",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Special Needs</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:8}}>
-            <Chk l="Refrigeration" k="cargoRefrig"/>
-            <Chk l="Enhanced Security" k="cargoSecurity"/>
-            <Chk l="Special Handling" k="cargoSpecial"/>
-          </div>
+          <p style={{fontSize:12,color:"var(--g5)",marginTop:8}}>These details appear on your rental agreements and are visible to BTOP staff for verification.</p>
         </S>
       </div>}
 
@@ -4708,14 +4716,21 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout}){
         </label>
         {prof.isCompany?<div>
           <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:12}}>
-            <div className="ig" style={{flex:1,minWidth:200}}><label>Company Name</label><input className="inf" value={prof.compName} onChange={e=>upProf("compName",e.target.value)} placeholder="BTOP Rentals LLC"/></div>
-            <div className="ig" style={{flex:1,minWidth:200}}><label>Business Type</label><select className="inf" value={prof.compType} onChange={e=>upProf("compType",e.target.value)}><option value="">Select...</option><option value="llc">LLC</option><option value="corp">Corporation</option><option value="sole">Sole Proprietor</option><option value="other">Other</option></select></div>
+            <div className="ig" style={{flex:1,minWidth:200}}><label>Legal Company Name *</label><input className="inf" value={prof.compLegalName} onChange={e=>upProf("compLegalName",e.target.value)} placeholder="ACME Logistics LLC"/></div>
+            <div className="ig" style={{flex:1,minWidth:200}}><label>DBA / Trade Name</label><input className="inf" value={prof.compDBA} onChange={e=>upProf("compDBA",e.target.value)} placeholder="If different from legal name"/></div>
           </div>
           <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:12}}>
-            <div className="ig" style={{flex:1,minWidth:200}}><label>Tax ID / EIN</label><input className="inf" value={prof.taxId} onChange={e=>upProf("taxId",e.target.value)} placeholder="XX-XXXXXXX"/></div>
-            <div className="ig" style={{flex:1,minWidth:200}}><label>Contact Person</label><input className="inf" value={prof.compContact} onChange={e=>upProf("compContact",e.target.value)} placeholder="Full name"/></div>
+            <div className="ig" style={{flex:1,minWidth:160}}><label>Entity Type *</label><select className="inf" value={prof.compType} onChange={e=>upProf("compType",e.target.value)}><option value="LLC">LLC</option><option value="Corp">C-Corporation</option><option value="SCorp">S-Corporation</option><option value="Partnership">Partnership</option><option value="Sole">Sole Proprietor</option></select></div>
+            <div className="ig" style={{flex:1,minWidth:160}}><label>Federal EIN *</label><input className="inf" value={prof.ein} onChange={e=>upProf("ein",e.target.value)} placeholder="XX-XXXXXXX"/></div>
+            <div className="ig" style={{flex:1,minWidth:160}}><label>State of Incorporation *</label><input className="inf" value={prof.compState} onChange={e=>upProf("compState",e.target.value)} placeholder="TX"/></div>
           </div>
-          <div className="ig"><label>Fiscal Address</label><input className="inf" value={prof.compAddr} onChange={e=>upProf("compAddr",e.target.value)} placeholder="Full address"/></div>
+          <div className="ig" style={{marginBottom:12}}><label>Registered Business Address *</label><input className="inf" value={prof.compAddr} onChange={e=>upProf("compAddr",e.target.value)} placeholder="Street, City, State ZIP"/></div>
+          <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+            <div className="ig" style={{flex:1,minWidth:160}}><label>Authorized Contact *</label><input className="inf" value={prof.compContact} onChange={e=>upProf("compContact",e.target.value)} placeholder="Full name"/></div>
+            <div className="ig" style={{flex:1,minWidth:160}}><label>Business Phone *</label><input className="inf" type="tel" value={prof.compPhone} onChange={e=>upProf("compPhone",e.target.value)} placeholder="(469) 000-0000"/></div>
+            <div className="ig" style={{flex:1,minWidth:160}}><label>Billing Email *</label><input className="inf" type="email" value={prof.compEmail} onChange={e=>upProf("compEmail",e.target.value)} placeholder="ap@company.com"/></div>
+          </div>
+          <p style={{fontSize:12,color:"var(--g5)",marginTop:10}}>Required for business rental agreements and to be eligible for a company credit line. Fields marked * are mandatory for US business accounts.</p>
         </div>:<div style={{textAlign:"center",padding:40,color:"var(--g3)"}}><X n="list" s={48} c="var(--g3)"/><p style={{marginTop:12,fontSize:14}}>Enable the checkbox above to add company details</p></div>}
       </div>}
 
@@ -4904,12 +4919,6 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout}){
             }} className="btn bp bsm" style={{alignSelf:"flex-start"}}><X n="ok" s={14}/>Update Password</button>
           </div>
         </S>
-        <S l="Two-Factor Authentication">
-          <label style={{display:"flex",alignItems:"center",gap:14,padding:16,background:twoFA?"var(--b0)":"var(--g0)",borderRadius:12,cursor:"pointer",border:twoFA?"2px solid var(--b4)":"2px solid var(--g2)"}}>
-            <input type="checkbox" checked={twoFA} onChange={e=>s2FA(e.target.checked)} style={{width:20,height:20,accentColor:"var(--b6)"}}/>
-            <div><div style={{fontWeight:700,color:"var(--navy)"}}>Enable 2FA</div><div style={{fontSize:13,color:"var(--g5)"}}>Add an extra layer of security via SMS or authenticator app</div></div>
-          </label>
-        </S>
         <S l="Account Actions">
           <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
             <button className="btn bsm bs"><X n="out" s={14}/>Sign Out All Devices</button>
@@ -4954,16 +4963,19 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout}){
         <h2 style={{fontWeight:800,fontSize:20,color:"var(--navy)",marginBottom:20}}>Notifications</h2>
         <S l="Preferred Contact Channel">
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {[["whatsapp","WhatsApp"],["email","Email"],["sms","SMS"]].map(([v,l])=><button key={v} onClick={()=>upProf("notifChannel",v)} className="btn bsm" style={{background:prof.notifChannel===v?"var(--b6)":"#fff",color:prof.notifChannel===v?"#fff":"var(--g7)",border:prof.notifChannel===v?"none":"1px solid var(--g3)"}}>{l}</button>)}
+            {[["email","Email"],["sms","SMS"]].map(([v,l])=><button key={v} onClick={()=>upProf("notifChannel",v)} className="btn bsm" style={{background:prof.notifChannel===v?"var(--b6)":"#fff",color:prof.notifChannel===v?"#fff":"var(--g7)",border:prof.notifChannel===v?"none":"1px solid var(--g3)"}}>{l}</button>)}
           </div>
         </S>
         <S l="Active Alerts">
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:10}}>
-            <Chk l="Return Reminder" k="notifReturn"/>
-            <Chk l="Storage Expiry" k="notifExpiry"/>
-            <Chk l="Cargo Movements" k="notifCargo"/>
-            <Chk l="Incident Reports" k="notifIncident"/>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:10}}>
+            <Chk l="Payment validated" k="notifPayValidated"/>
+            <Chk l="Payment rejected" k="notifPayRejected"/>
+            <Chk l="Credit updates (limit, due, overdue)" k="notifCredit"/>
+            <Chk l="Rental deadlines (start / due / return)" k="notifRentalDeadline"/>
+            <Chk l="Return reminder" k="notifReturn"/>
+            <Chk l="Incident reports" k="notifIncident"/>
           </div>
+          <p style={{fontSize:12,color:"var(--g5)",marginTop:10}}>You'll be notified about payment outcomes, your credit line, and rental time windows. Channel: {prof.notifChannel==="sms"?"SMS":"Email"}.</p>
         </S>
       </div>}
 
