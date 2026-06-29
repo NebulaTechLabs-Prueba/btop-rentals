@@ -7,5 +7,5 @@ dist
 # Local-only backend (not used in static demo)
 server/
 
-# Local-only integration notes (not essential to the build)
-docs/stripe-integration.md
+# Local-only docs / integration notes (not essential to the build)
+docs/
