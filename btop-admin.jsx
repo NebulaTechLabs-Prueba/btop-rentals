@@ -2368,43 +2368,77 @@ function UsersMod({users,setUsers,roles,setRoles}){
 }
 
 /* ═══ ANALYTICS ═══ */
-function AnalyticsMod(){
+function AnalyticsMod({orders=[],fleet=[],spaces=[],contacts=[],creditLines=[],bookings=[]}){
   const [m,setM]=useState("revenue");
+  /* All metrics derive from the live local data so the demo reacts to test usage */
+  const live=orders.filter(o=>o.status!=="Cancelled");
+  const revenue=live.reduce((s,o)=>s+(o.tp||0)+(o.dp||0),0);
+  const cnt=live.length;
+  const avg=cnt?revenue/cnt:0;
+  const now=Date.now();
+  const within30=live.filter(o=>{const d=new Date(o.od||o.approvedAt||now).getTime();return (now-d)/86400000<=30}).length;
+  const liveStatuses=["Reserved","Confirmed","Active","Delivered","Pending"];
+  const activeFleet=live.filter(o=>!String(o.uid||"").startsWith("sp-")&&liveStatuses.includes(o.status)).length;
+  const util=fleet.length?Math.min(100,Math.round(activeFleet/fleet.length*100)):0;
+  /* Cumulative trend by order date (reacts to every new order) */
+  const sorted=[...live].sort((a,b)=>(a.od||"").localeCompare(b.od||""));
+  let cr=0,cb=0;const revSeries=[],bkSeries=[];
+  sorted.forEach(o=>{cr+=(o.tp||0)+(o.dp||0);cb+=1;revSeries.push(cr);bkSeries.push(cb)});
+  const ser=m==="revenue"?revSeries:bkSeries;
+  const trend=ser.length>=2?ser:[0,...(ser.length?ser:[0])];
+  /* Revenue split: trucks vs storage spaces */
+  const truckRev=live.filter(o=>!String(o.uid||"").startsWith("sp-")).reduce((s,o)=>s+(o.tp||0)+(o.dp||0),0);
+  const spaceRev=Math.max(0,revenue-truckRev);
+  const splT=truckRev+spaceRev||1;const truckPct=Math.round(truckRev/splT*100),spacePct=100-truckPct;
+  /* Top items by revenue */
+  const byVeh={};live.forEach(o=>{const k=o.un2||o.un||"Item";byVeh[k]=(byVeh[k]||0)+(o.tp||0)+(o.dp||0)});
+  const topVeh=Object.entries(byVeh).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([label,value],i)=>({label,value,display:"$"+(value/1000).toFixed(1)+"k",color:["#2563eb","#10b981","#f59e0b","#8b5cf6","#ef4444"][i%5]}));
+  /* Payment method mix */
+  const meth={};live.forEach(o=>{const k=o.payMethod==="card"?"Stripe":o.payMethod==="zelle"?"Zelle":o.payMethod==="cash"?"Cash":(o.payMethod==="credit"||o.payMethod==="invoice")?"Credit":"Other";meth[k]=(meth[k]||0)+1});
+  const methBars=Object.entries(meth).map(([label,value],i)=>({label,value,display:String(value),color:["#2563eb","#10b981","#f59e0b","#8b5cf6","#ef4444"][i%5]}));
+  /* CREDIT analytics */
+  const activeCL=creditLines.filter(c=>c.active);
+  const usedFor=(email)=>orders.filter(o=>(o.payMethod==="credit"||o.payMethod==="invoice")&&o.ue===email&&o.status!=="Cancelled"&&!o.settlementPaid).reduce((s,o)=>s+(o.tp||0),0);
+  const climit=activeCL.reduce((s,c)=>s+(c.limit||0),0);
+  const cused=activeCL.reduce((s,c)=>s+usedFor(c.email),0);
+  const cavail=Math.max(0,climit-cused);
+  const usedPct=climit?Math.round(cused/climit*100):0;
+  const creditBars=activeCL.map((c,i)=>({label:c.clientName,value:usedFor(c.email),display:$f(usedFor(c.email)),color:["#2563eb","#10b981","#f59e0b","#8b5cf6","#ef4444"][i%5]})).filter(b=>b.value>0);
+  const today=new Date().toISOString().split("T")[0];
+  const overdueCnt=orders.filter(o=>{if(!(o.payMethod==="credit"||o.payMethod==="invoice")||o.status==="Cancelled"||o.settlementPaid)return false;const cl=activeCL.find(c=>c.email===o.ue);if(!cl)return false;const base=o.approvedAt||o.od||today;const due=new Date(new Date(base).getTime()+((cl.terms||30)*86400000)).toISOString().split("T")[0];return due<today}).length;
   return (
     <div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6"><St label="Revenue (30d)" value="$43,200" delta="+17%" trend="up" icon={DollarSign} breakdown={{
-        formula:"Sum of paid order totals where order date is within the last 30 days",
-        source:"Reservations + Transactions tables",
-        description:"Demo value — production would aggregate paid orders from the rolling 30-day window.",
-        items:[]
-      }}/><St label="Bookings" value="42" delta="+22%" trend="up" icon={Calendar} breakdown={{
-        formula:"Count of orders created in the last 30 days",
-        source:"Reservations table",
-        description:"New reservations created in the rolling 30-day window. Demo value.",
-        items:[]
-      }}/><St label="Avg Value" value="$1,028" trend="up" icon={TrendingUp} breakdown={{
-        formula:"Total revenue ÷ booking count for the period",
-        source:"Reservations table",
-        description:"Average revenue per reservation. Higher = clients renting more days or higher-tier vehicles.",
-        items:[]
-      }}/><St label="Utilization" value="67%" trend="up" icon={Truck} breakdown={{
-        formula:"Days rented ÷ days available × 100, across all vehicles",
-        source:"Cross-references Fleet × Bookings",
-        description:"Fleet efficiency metric. 100% means every vehicle was rented every day. Higher = more efficient use of capital.",
-        items:[]
-      }}/></div>
-      <div className="bg-white border border-stone-200 rounded-2xl p-5 mb-6"><div className="flex items-center justify-between mb-4"><h3 className="text-sm font-semibold">30-Day Trend</h3><div className="flex gap-1 bg-stone-100 rounded-full p-0.5"><button onClick={()=>setM("revenue")} className={`px-3 py-1 rounded-full text-xs ${m==="revenue"?"bg-white shadow-sm":"text-stone-600"}`}>Revenue</button><button onClick={()=>setM("bookings")} className={`px-3 py-1 rounded-full text-xs ${m==="bookings"?"bg-white shadow-sm":"text-stone-600"}`}>Bookings</button></div></div><Area data={revS} color={m==="revenue"?"#2563eb":"#10b981"} height={200}/></div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"><SC title="Revenue Split"><div className="flex items-center gap-5"><Donut data={[{name:"Trucks",value:62,color:"#2563eb"},{name:"Spaces",value:38,color:"#f59e0b"}]}/><div className="space-y-3">{[{n:"Trucks",p:62,c:"#2563eb"},{n:"Spaces",p:38,c:"#f59e0b"}].map(x=>(<div key={x.n} className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{background:x.c}}/><span className="text-xs font-medium">{x.n} – {x.p}%</span></div>))}</div></div></SC>
-        <SC title="Top Vehicles"><HBar data={[{label:"Cascadia",value:3600,display:"$3.6k",color:"#2563eb"},{label:"GMC Box",value:1300,display:"$1.3k",color:"#10b981"},{label:"Yard Spotter",value:1000,display:"$1k",color:"#f59e0b"}]}/></SC>
-        <SC title="Sources"><HBar data={[{label:"Website",value:55,display:"55%",color:"#2563eb"},{label:"Phone",value:25,display:"25%",color:"#10b981"},{label:"Walk-in",value:15,display:"15%",color:"#f59e0b"}]}/></SC>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+        <St label="Revenue (all)" value={$f(revenue)} delta={`${within30} in last 30d`} trend="up" icon={DollarSign}/>
+        <St label="Orders" value={cnt} delta={`${within30} last 30d`} trend="up" icon={Calendar}/>
+        <St label="Avg Value" value={$f(avg)} trend="up" icon={TrendingUp}/>
+        <St label="Fleet Utilization" value={`${util}%`} delta={`${activeFleet}/${fleet.length} active`} trend="up" icon={Truck}/>
+      </div>
+      <div className="bg-white border border-stone-200 rounded-2xl p-5 mb-6"><div className="flex items-center justify-between mb-4"><h3 className="text-sm font-semibold">Cumulative {m==="revenue"?"Revenue":"Orders"}</h3><div className="flex gap-1 bg-stone-100 rounded-full p-0.5"><button onClick={()=>setM("revenue")} className={`px-3 py-1 rounded-full text-xs ${m==="revenue"?"bg-white shadow-sm":"text-stone-600"}`}>Revenue</button><button onClick={()=>setM("bookings")} className={`px-3 py-1 rounded-full text-xs ${m==="bookings"?"bg-white shadow-sm":"text-stone-600"}`}>Orders</button></div></div>{trend.length>=2?<Area data={trend} color={m==="revenue"?"#2563eb":"#10b981"} height={200}/>:<div className="text-center py-16 text-stone-400 text-sm">No orders yet — create one to see the trend.</div>}</div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <SC title="Revenue Split"><div className="flex items-center gap-5"><Donut data={[{name:"Trucks",value:truckPct,color:"#2563eb"},{name:"Spaces",value:spacePct,color:"#f59e0b"}]}/><div className="space-y-3">{[{n:"Trucks",p:truckPct,c:"#2563eb"},{n:"Spaces",p:spacePct,c:"#f59e0b"}].map(x=>(<div key={x.n} className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{background:x.c}}/><span className="text-xs font-medium">{x.n} – {x.p}%</span></div>))}</div></div></SC>
+        <SC title="Top Items by Revenue">{topVeh.length?<HBar data={topVeh}/>:<div className="text-center py-10 text-stone-400 text-xs">No data yet</div>}</SC>
+        <SC title="Payment Methods">{methBars.length?<HBar data={methBars}/>:<div className="text-center py-10 text-stone-400 text-xs">No data yet</div>}</SC>
+      </div>
+      {/* CREDIT ANALYTICS */}
+      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><CreditCard className="w-4 h-4 text-blue-700"/>Credit</h3>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+        <St label="Credit clients" value={activeCL.length} icon={Users}/>
+        <St label="Extended" value={$f(climit)} icon={CreditCard} trend="up"/>
+        <St label="Outstanding" value={$f(cused)} delta={`${usedPct}% of limit`} icon={DollarSign} trend={usedPct>85?"down":"up"}/>
+        <St label="Overdue" value={overdueCnt} icon={AlertTriangle} trend={overdueCnt?"down":"up"}/>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <SC title="Credit Utilization">{climit>0?<div className="flex items-center gap-5"><Donut data={[{name:"Used",value:usedPct,color:"#1B4DDB"},{name:"Available",value:100-usedPct,color:"#E5E7EB"}]}/><div className="space-y-3"><div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{background:"#1B4DDB"}}/><span className="text-xs font-medium">Used – {$f(cused)}</span></div><div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{background:"#9CA3AF"}}/><span className="text-xs font-medium">Available – {$f(cavail)}</span></div></div></div>:<div className="text-center py-10 text-stone-400 text-xs">No credit lines granted</div>}</SC>
+        <SC title="Credit Used by Client">{creditBars.length?<HBar data={creditBars}/>:<div className="text-center py-10 text-stone-400 text-xs">No credit in use</div>}</SC>
+        <SC title="Credit summary"><div className="space-y-2 text-sm">{[["Total limit",$f(climit)],["In use",$f(cused)],["Available",$f(cavail)],["Overdue orders",overdueCnt]].map(([l,v])=><div key={l} className="flex justify-between py-2 border-b border-stone-100 last:border-0"><span className="text-stone-500">{l}</span><span className="font-semibold">{v}</span></div>)}</div></SC>
       </div>
     </div>
   );
 }
 
 /* ═══ DASHBOARD ═══ */
-function DashMod({nav,fleet,spaces,orders=[],bookings=[],creditLines=[]}){
-  const act=admSeedBookings.filter(b=>b.status==="active");
+function DashMod({nav,fleet,spaces,orders=[],bookings=[],creditLines=[],contacts=[]}){
   /* Real numbers */
   const today=new Date().toISOString().split("T")[0];
   const liveStatuses=["Reserved","Confirmed","Active","Delivered","Pending"];
@@ -2413,7 +2447,19 @@ function DashMod({nav,fleet,spaces,orders=[],bookings=[],creditLines=[]}){
   const totalRevenue=orders.filter(o=>o.status!=="Cancelled").reduce((s,o)=>s+(o.tp||0)+(o.dp||0),0);
   const availFleet=fleet.filter(v=>v.status==="available");
   const availSpaces=spaces.filter(s=>s.status==="available");
-  const contactsActive=admSeedContacts.filter(c=>c.orders>0);
+  const contactsActive=contacts.filter(c=>(c.orders>0)||orders.some(o=>o.ue===c.email&&o.status!=="Cancelled"));
+  /* Cumulative revenue series from live orders (reacts to new orders) */
+  const sortedOrders=[...orders].filter(o=>o.status!=="Cancelled").sort((a,b)=>(a.od||"").localeCompare(b.od||""));
+  let _cr=0;const revSeries=sortedOrders.map(o=>{_cr+=(o.tp||0)+(o.dp||0);return _cr});
+  const chartData=revSeries.length>=2?revSeries:[0,...(revSeries.length?revSeries:[0])];
+  /* Dynamic alerts from live data */
+  const pendingCnt=orders.filter(o=>o.status==="Pending").length;
+  const overdueCredit=orders.filter(o=>{if(!(o.payMethod==="credit"||o.payMethod==="invoice")||o.status==="Cancelled"||o.settlementPaid)return false;const cl=creditLines.find(c=>c.active&&c.email===o.ue);if(!cl)return false;const base=o.approvedAt||o.od||today;const due=new Date(new Date(base).getTime()+((cl.terms||30)*86400000)).toISOString().split("T")[0];return due<today});
+  const dynAlerts=[
+    ...(pendingCnt?[{t:"Payments to validate",d:`${pendingCnt} order(s) awaiting validation`,l:"warning",sec:"orderspay"}]:[]),
+    ...(overdueCredit.length?[{t:"Overdue credit",d:`${overdueCredit.length} invoice(s) past due`,l:"critical",sec:"credit"}]:[]),
+    ...(availFleet.length<=1?[{t:"Low fleet availability",d:`${availFleet.length} vehicle(s) available`,l:"warning",sec:"fleet"}]:[]),
+  ];
 
   return (
     <div>
@@ -2437,11 +2483,11 @@ function DashMod({nav,fleet,spaces,orders=[],bookings=[],creditLines=[]}){
           description:"All-time gross revenue from non-cancelled orders. Includes both rental fees and security deposits charged.",
           items:orders.filter(o=>o.status!=="Cancelled").map(o=>({title:`${o.invNum||o.oid} · ${o.un||""}`,subtitle:`${o.un2||o.un} · ${o.status}`,value:`$${((o.tp||0)+(o.dp||0)).toFixed(0)}`}))
         }}/>
-        <St label="Contacts" value={admSeedContacts.length} delta={`${contactsActive.length} active`} trend="up" icon={Contact} breakdown={{
+        <St label="Contacts" value={contacts.length} delta={`${contactsActive.length} active`} trend="up" icon={Contact} breakdown={{
           formula:"Count of all rows in the Contacts table",
           source:"Contacts CRM — see the Contacts panel for details.",
-          description:"Total contacts (clients + leads). Active = contacts with orders > 0.",
-          items:admSeedContacts.map(c=>({title:c.name,subtitle:`${c.email} · ${c.orders||0} order${c.orders===1?"":"s"}${c.company?" · "+c.company:""}`,value:`$${(c.totalSpent||0).toLocaleString()}`}))
+          description:"Total contacts (clients + leads). Active = contacts with at least one order.",
+          items:contacts.map(c=>({title:c.name,subtitle:`${c.email}${c.company?" · "+c.company:""}`,value:`$${(c.totalSpent||0).toLocaleString()}`}))
         }}/>
       </div>
       {/* CREDIT OVERVIEW — ties the Credit & Overdue module into the dashboard */}
@@ -2460,8 +2506,8 @@ function DashMod({nav,fleet,spaces,orders=[],bookings=[],creditLines=[]}){
           </div>
         </div>;})()}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">{[{l:"Fleet",i:Truck,t:"fleet"},{l:"Spaces",i:Warehouse,t:"spaces"},{l:"Bookings",i:Calendar,t:"bookings"},{l:"Contacts",i:Contact,t:"contacts"},{l:"Analytics",i:BarChart3,t:"analytics"}].map(q=>{const Ic=q.i;return (<button key={q.l} onClick={()=>nav(q.t)} className="bg-white border border-stone-200 rounded-2xl p-4 text-left hover:border-blue-400 hover:shadow-sm transition-all group"><div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center mb-3 group-hover:bg-blue-100"><Ic className="w-4 h-4"/></div><div className="text-sm font-medium">{q.l}</div></button>);})}</div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6"><div className="lg:col-span-2"><SC title="Revenue – 30 Days"><Area data={revS} color="#2563eb" height={180}/></SC></div>
-        <SC title="Alerts" padded={false}><div className="divide-y divide-stone-100">{[{t:"Late Return",d:"Cascadia – 2 days overdue",l:"critical"},{t:"Maintenance",d:"Forklift service overdue",l:"warning"},{t:"New Contact",d:"Maria Gonzalez registered",l:"info"}].map((a,i)=>(<div key={i} className="px-5 py-3"><div className="flex items-start gap-3"><span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${a.l==="critical"?"bg-red-500":a.l==="warning"?"bg-amber-500":"bg-blue-500"}`}/><div><div className="text-sm font-medium">{a.t}</div><p className="text-xs text-stone-600">{a.d}</p></div></div></div>))}</div></SC>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6"><div className="lg:col-span-2"><SC title="Cumulative Revenue">{chartData.length>=2?<Area data={chartData} color="#2563eb" height={180}/>:<div className="text-center py-14 text-stone-400 text-sm">No orders yet — revenue will appear here as orders come in.</div>}</SC></div>
+        <SC title="Alerts" padded={false}><div className="divide-y divide-stone-100">{dynAlerts.length===0?<div className="px-5 py-8 text-center text-stone-400 text-sm">✓ All clear — no alerts</div>:dynAlerts.map((a,i)=>(<button key={i} onClick={()=>a.sec&&nav(a.sec)} className="w-full text-left px-5 py-3 hover:bg-stone-50"><div className="flex items-start gap-3"><span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${a.l==="critical"?"bg-red-500":a.l==="warning"?"bg-amber-500":"bg-blue-500"}`}/><div><div className="text-sm font-medium">{a.t}</div><p className="text-xs text-stone-600">{a.d}</p></div></div></button>))}</div></SC>
       </div>
     </div>
   );
@@ -4963,8 +5009,8 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
           </div>
         </div>
         <div className="admin-main-body text-stone-900" style={{padding:32}}>
-          {section==="dash"&&<DashMod nav={setSection} fleet={fleet} spaces={spaces} orders={orders} bookings={bookings} creditLines={creditLines}/>}
-          {section==="analytics"&&<AnalyticsMod/>}
+          {section==="dash"&&<DashMod nav={setSection} fleet={fleet} spaces={spaces} orders={orders} bookings={bookings} creditLines={creditLines} contacts={contacts}/>}
+          {section==="analytics"&&<AnalyticsMod orders={orders} fleet={fleet} spaces={spaces} contacts={contacts} creditLines={creditLines} bookings={bookings}/>}
           {section==="fleet"&&<FleetMod fleet={fleet} setFleet={setFleet} bookings={bookings} orders={orders}/>}
           {section==="detfleet"&&<DetailedFleetMod fleet={fleet} bookings={bookings} setFleet={setFleet}/>}
           {section==="maintenance"&&<MaintenanceMod fleet={fleet} spaces={spaces} bookings={bookings} setBookings={setBookings} onViewUnit={(vid)=>{setSection("detfleet")}}/>}
