@@ -4644,6 +4644,8 @@ function Fl({fleet,sv,ac,bookings=[],setCartOpen,t,cart=[],orders=[]}){const [f,
   };
   const setMileFor=(i,v)=>setBmiArr(p=>{const a=[...p];a[i]=Number(v)||0;return a});
   const setDateFor=(i,field,v)=>setBDatesArr(p=>{const a=[...p];a[i]={...a[i],[field]:v};return a});
+  /* Apply the active unit's date range to every unit of this model in one click */
+  const applyBDatesToAll=()=>{const src=bDatesArr[bActiveUnit];if(!src?.s||!src?.e)return;setBDatesArr(p=>p.map(()=>({s:src.s,e:src.e,sel:"start"})));};
   const bTotalMi=bmiArr.reduce((s,m)=>s+m,0);
   /* Per-unit breakdowns (each unit can have its own dates) */
   const unitBreakdowns=bDatesArr.map((ud,i)=>{
@@ -4754,6 +4756,7 @@ function Fl({fleet,sv,ac,bookings=[],setCartOpen,t,cart=[],orders=[]}){const [f,
             <h4 style={{fontWeight:700,fontSize:14,color:"var(--navy)"}}>Dates{bqty>1?` · Unit ${bActiveUnit+1}`:""}</h4>
           </div>
           {bqty>1&&<div style={{display:"flex",gap:4,marginBottom:10,flexWrap:"wrap"}}>{Array.from({length:bqty}).map((_,i)=>{const ud=bDatesArr[i]||{};const done=ud.s&&ud.e;return <button key={i} onClick={()=>setBActiveUnit(i)} style={{padding:"4px 10px",borderRadius:8,border:"none",background:bActiveUnit===i?"var(--b6)":done?"var(--b1)":"var(--g1)",color:bActiveUnit===i?"#fff":done?"var(--b8)":"var(--g6)",fontWeight:700,fontSize:11,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>U{i+1}{done?" ✓":""}</button>;})}</div>}
+          {bqty>1&&bDatesArr[bActiveUnit]?.s&&bDatesArr[bActiveUnit]?.e&&<button onClick={applyBDatesToAll} style={{display:"inline-flex",alignItems:"center",gap:6,marginBottom:10,padding:"8px 12px",background:"var(--b0)",border:"1px solid var(--b2)",borderRadius:10,cursor:"pointer",fontSize:12,fontWeight:700,color:"var(--b7)",width:"100%",justifyContent:"center"}}>📋 Apply these dates ({dStr(bDatesArr[bActiveUnit].s)} → {dStr(bDatesArr[bActiveUnit].e)}) to all {bqty} units</button>}
           <Cal sd={bDatesArr[bActiveUnit]?.s} ed={bDatesArr[bActiveUnit]?.e} setSd={v=>setDateFor(bActiveUnit,"s",v)} setEd={v=>setDateFor(bActiveUnit,"e",v)} sel={bDatesArr[bActiveUnit]?.sel||"start"} setSel={v=>setDateFor(bActiveUnit,"sel",v)} blocked={vBlk}/>
         </div>
         {/* COLUMNA 3 — SUMMARY */}
