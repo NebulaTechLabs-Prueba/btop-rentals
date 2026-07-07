@@ -98,7 +98,7 @@ const admSeedUsers=[
 const admSeedRoles=[
   {id:"r1",name:"Super Admin",scope:"Full access",users:1,perms:[3,3,3,3,3,3]},
   {id:"r2",name:"Fleet Manager",scope:"Fleet + Bookings",users:2,perms:[3,3,2,1,0,0]},
-  {id:"r3",name:"Sales Rep",scope:"Analytics only",users:3,perms:[0,0,0,0,0,0]},
+  {id:"r3",name:"Sales Rep",scope:"Contacts + Reservations",users:3,perms:[1,1,2,0,0,0]},
 ];
 const PERMS=["Fleet","Spaces","Bookings","Payments","Users","Settings"];
 
@@ -2311,7 +2311,9 @@ function UsersMod({users,setUsers,roles,setRoles}){
   const [invEmail,setInvEmail]=useState("");
   const [invRole,setInvRole]=useState("Sales Rep");
   const [editingUser,setEditingUser]=useState(null);
+  const [resetSent,setResetSent]=useState("");
 
+  const sendReset=(u)=>{setResetSent(u.email);setUsers(p=>p.map(x=>x.id===u.id?{...x,resetSentAt:new Date().toISOString()}:x));setTimeout(()=>setResetSent(s=>s===u.email?"":s),3500)};
   const sendInvite=()=>{if(!invEmail)return;const nu={id:nid(),name:invEmail.split("@")[0],email:invEmail,role:invRole,status:"active",last:"just now",initials:invEmail.substring(0,2).toUpperCase()};setUsers(p=>[...p,nu]);setInvEmail("");setInviting(false)};
   const updateRole=(uid,role)=>setUsers(p=>p.map(u=>u.id===uid?{...u,role}:u));
   const toggleStatus=(uid)=>setUsers(p=>p.map(u=>u.id===uid?{...u,status:u.status==="active"?"inactive":"active"}:u));
@@ -2351,14 +2353,14 @@ function UsersMod({users,setUsers,roles,setRoles}){
         </div>
       </div></div>}
 
-      {tab==="users"&&<SC title="All Users" padded={false}><DT headers={["User","Role","Last Access","Status",""]} rows={users.map(u=>{
+      {tab==="users"&&<SC title="All Users" padded={false}><DT headers={["User","Role","Last Access","Status","Password"]} rows={users.map(u=>{
         const isSA=u.role==="Super Admin";
         return [
         <div className="flex items-center gap-3"><div className="w-9 h-9 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-xs font-semibold">{u.initials}</div><div><div className="font-medium">{u.name}{isSA&&<Lock className="w-3 h-3 inline ml-1 text-amber-500"/>}</div><div className="text-xs text-stone-500">{u.email}</div></div></div>,
         isSA?<span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded-lg">Super Admin (locked)</span>:<select value={u.role} onChange={e=>updateRole(u.id,e.target.value)} className="text-xs px-2 py-1 border border-stone-200 rounded-lg">{roles.filter(r=>r.name!=="Super Admin").map(r=>(<option key={r.name} value={r.name}>{r.name}</option>))}</select>,
         <span className="text-xs text-stone-500">{u.last}</span>,
         isSA?<Pill tone="emerald">active (protected)</Pill>:<button onClick={()=>toggleStatus(u.id)}><Pill tone={u.status==="active"?"emerald":"stone"}>{u.status}</Pill></button>,
-        isSA?<span className="text-xs text-stone-400">—</span>:<button className="p-1.5 hover:bg-stone-100 rounded-lg"><Pencil className="w-3.5 h-3.5"/></button>,
+        resetSent===u.email?<span className="text-xs font-semibold text-emerald-700 inline-flex items-center gap-1">✓ Reset link sent</span>:<button onClick={()=>sendReset(u)} className="text-xs font-semibold text-blue-700 border border-blue-200 hover:bg-blue-50 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5">📨 Send reset link</button>,
       ]})}/></SC>}
 
       {tab==="roles"&&<div className="space-y-4">
@@ -3161,8 +3163,9 @@ function CartsMod({carts,setCarts,contacts=[]}){
 }
 
 /* ═══ ADMIN · ORDERS & PAYMENT VALIDATION ═══ */
-function OrdersPayMod({orders,setOrders,approveOrder,rejectOrder}){
+function OrdersPayMod({orders,setOrders,approveOrder,rejectOrder,authUsers=[]}){
   const [tab,setTab]=useState("pending");
+  const repName=e=>{if(!e)return"";const u=authUsers.find(x=>x.email===e);return u?u.name:e};
   const [q,setQ]=useState("");
   const [sel,setSel]=useState(null);
   const pending=orders.filter(o=>o.status==="Pending");
@@ -3197,7 +3200,7 @@ function OrdersPayMod({orders,setOrders,approveOrder,rejectOrder}){
             const dl=o.status==="Pending"?daysLeft(o.expiresAt):null;
             return [
             <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded">{o.oid}</span>,
-            <div><div className="font-semibold text-sm">{o.un||"—"}</div><div className="text-[10px] text-stone-400">{o.ue}</div></div>,
+            <div><div className="font-semibold text-sm">{o.un||"—"}</div><div className="text-[10px] text-stone-400">{o.ue}</div>{o.salesRep&&<div className="text-[10px] mt-0.5 inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 font-semibold px-1.5 py-0.5 rounded">🧑‍💼 {repName(o.salesRep)}</div>}</div>,
             <span className="text-xs font-medium">{methodLbl[o.payMethod]||o.payMethod||"—"}</span>,
             <Pill tone={payTone(o)}>{payLbl(o)}</Pill>,
             <Pill tone={o.status==="Pending"?"amber":o.status==="Confirmed"?"blue":o.status==="Cancelled"?"red":"stone"}>{o.status}</Pill>,
@@ -3216,6 +3219,7 @@ function OrdersPayMod({orders,setOrders,approveOrder,rejectOrder}){
             <div className="grid grid-cols-2 gap-3">
               {[["Customer",o.un],["Email",o.ue],["Method",methodLbl[o.payMethod]||o.payMethod],["Invoice",o.invNum||"—"]].map(([l,v])=><div key={l} className="bg-stone-50 rounded-lg p-3"><div className="text-[10px] text-stone-400 uppercase font-semibold">{l}</div><div className="font-medium mt-0.5 text-sm break-words">{v||"—"}</div></div>)}
             </div>
+            {o.salesRep&&<div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-800"><div className="font-semibold uppercase mb-0.5 flex items-center gap-1.5">🧑‍💼 Booked by sales rep</div><p><strong>{repName(o.salesRep)}</strong> scheduled this reservation on behalf of the customer. Commission accrues to them once you validate it (see the Commissions module).</p></div>}
             {o.status==="Pending"&&<div className={`p-3 rounded-xl border text-xs ${dl!=null&&dl<=5?"bg-red-50 border-red-200 text-red-800":"bg-amber-50 border-amber-200 text-amber-800"}`}><div className="font-semibold flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/>Expires in {dl} day(s)</div><p className="mt-1">Pending orders are automatically removed after {PENDING_TTL_DAYS} days if the payment is not validated.</p></div>}
             {o.payMethod==="zelle"&&o.payDetail&&<div className="p-3 bg-stone-50 rounded-xl text-xs space-y-1">
               <div className="font-semibold text-stone-700 uppercase mb-1">Zelle report</div>
@@ -3434,17 +3438,12 @@ const isEarned=(o)=>EARNED_STATUSES.includes(o.status);
 const commissionAmount=(o,pol)=>{if(!o||!o.salesRep||o.status==="Cancelled")return 0;const base=o.tp||0;return (pol&&pol.mode==="fixed")?(Number(pol.value)||0):base*((Number(pol&&pol.value)||0)/100)};
 
 /* ═══ SALES PANEL (role: sales) — schedule reservations for contacts and track own commissions ═══ */
-function SalesPanel({user,sv,logout,t,contacts=[],setContacts,fleet=[],orders=[],fleetBookings=[],scheduleSale,commissionPolicy,sendMagicLink}){
+function SalesPanel({user,sv,logout,t,contacts=[],setContacts,fleet=[],orders=[],fleetBookings=[],scheduleSale,commissionPolicy,sendMagicLink,startBooking,updateMyAccount}){
   const [tab,setTab]=useState("schedule");
   const [pickContact,setPickContact]=useState("");
   const [nc,setNc]=useState({name:"",email:"",phone:"",company:""});
   const [addingC,setAddingC]=useState(false);
-  const [unitId,setUnitId]=useState("");
-  const [sd,setSd]=useState("");const [ed,setEd]=useState("");
-  const avail=fleet.filter(v=>v.status==="available"||v.status==="rented");
-  const unit=fleet.find(v=>v.id===unitId);
-  const days=(sd&&ed)?Math.max(1,Math.round((new Date(ed)-new Date(sd))/86400000)):0;
-  const rent=unit&&days?price(unit,days):0;const deposit=unit&&days?dep(unit,days):0;
+  const [acc,setAcc]=useState({name:user.name||"",phone:user.phone||"",pw:"",pw2:""});
   const contact=contacts.find(c=>c.email===pickContact);
   const myOrders=orders.filter(o=>o.salesRep===user.email);
   const earned=myOrders.filter(isEarned);
@@ -3453,12 +3452,14 @@ function SalesPanel({user,sv,logout,t,contacts=[],setContacts,fleet=[],orders=[]
   const projected=myOrders.filter(o=>o.status==="Pending").reduce((s,o)=>s+commissionAmount(o,commissionPolicy),0);
   const polLabel=commissionPolicy?.mode==="fixed"?`${$f(commissionPolicy.value)} per sale`:`${commissionPolicy?.value||0}% of sale`;
   const createContact=()=>{if(!nc.name||!nc.email)return;const c={...nc,id:nid(),city:"",idDoc:"",registered:new Date().toISOString().split("T")[0],lastOrder:"",totalSpent:0,orders:0,hasAccount:false,createdBy:user.email};setContacts(p=>[c,...p]);setPickContact(c.email);setNc({name:"",email:"",phone:"",company:""});setAddingC(false);t&&t("Contact created","success")};
-  const doSchedule=()=>{
+  const launchBooking=()=>{
     if(!contact){t&&t("Select or create a contact first","error");return}
-    if(!unit||!days){t&&t("Pick a vehicle and dates","error");return}
-    scheduleSale({contact,unit,sd,ed,days,rent,deposit});
-    setUnitId("");setSd("");setEd("");setPickContact("");
-    setTab("commissions");
+    startBooking&&startBooking(contact);
+  };
+  const saveAccount=()=>{
+    if(acc.pw&&acc.pw!==acc.pw2){t&&t("Passwords do not match","error");return}
+    const ok=updateMyAccount&&updateMyAccount({name:acc.name,phone:acc.phone,password:acc.pw||undefined});
+    if(ok)setAcc(a=>({...a,pw:"",pw2:""}));
   };
   return <div style={{position:"fixed",inset:0,zIndex:100,background:"#fafaf9",overflow:"auto"}}>
     <div style={{background:"#0A1628",color:"#fff",padding:"16px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:10}}>
@@ -3472,39 +3473,62 @@ function SalesPanel({user,sv,logout,t,contacts=[],setContacts,fleet=[],orders=[]
         <div className="cd" style={{padding:16}}><div style={{fontSize:11,color:"var(--g5)",textTransform:"uppercase",fontWeight:600}}>Paid</div><div style={{fontSize:24,fontWeight:800,color:"var(--navy)"}}>{$f(myPaid)}</div></div>
         <div className="cd" style={{padding:16}}><div style={{fontSize:11,color:"var(--g5)",textTransform:"uppercase",fontWeight:600}}>Pending payment</div><div style={{fontSize:24,fontWeight:800,color:"var(--orange)"}}>{$f(myAccrued-myPaid)}</div></div>
       </div>
-      <div style={{display:"flex",gap:8,marginBottom:16}}>{[["schedule","New reservation"],["commissions","My commissions"]].map(([k,l])=><button key={k} onClick={()=>setTab(k)} className="btn bsm" style={{background:tab===k?"var(--b6)":"#fff",color:tab===k?"#fff":"var(--g7)",border:tab===k?"none":"1px solid var(--g3)"}}>{l}</button>)}</div>
+      <div style={{display:"flex",gap:8,marginBottom:16}}>{[["schedule","New reservation"],["commissions","My commissions"],["account","My account"]].map(([k,l])=><button key={k} onClick={()=>setTab(k)} className="btn bsm" style={{background:tab===k?"var(--b6)":"#fff",color:tab===k?"#fff":"var(--g7)",border:tab===k?"none":"1px solid var(--g3)"}}>{l}</button>)}</div>
 
       {tab==="schedule"&&<div className="cd" style={{padding:24}}>
-        <h3 style={{fontWeight:800,fontSize:18,color:"var(--navy)",marginBottom:16}}>Schedule a reservation for a contact</h3>
-        {/* CONTACT */}
-        <div style={{marginBottom:16}}>
-          <label className="ig"><span style={{fontWeight:600,fontSize:12,color:"var(--g7)"}}>Contact</span></label>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginTop:6}}>
-            <select className="inf" style={{maxWidth:340}} value={pickContact} onChange={e=>setPickContact(e.target.value)}><option value="">Select a contact…</option>{contacts.map(c=><option key={c.id} value={c.email}>{c.name} — {c.email}{c.hasAccount?"":" (no account)"}</option>)}</select>
-            <button onClick={()=>setAddingC(!addingC)} className="btn bsm bs">＋ New contact</button>
+        <h3 style={{fontWeight:800,fontSize:18,color:"var(--navy)",marginBottom:4}}>Schedule a reservation for a contact</h3>
+        <p style={{fontSize:13,color:"var(--g5)",marginBottom:18}}>Pick who the booking is for, then use the full catalog — the same flow clients use — to add <strong>one or several</strong> vehicles and storage spaces with real availability, dates, mileage and deposits.</p>
+
+        {/* STEP 1 — WHO */}
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:11,fontWeight:700,color:"var(--b6)",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Step 1 · Customer</div>
+          {contact?<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:14,background:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:12}}>
+            <div>
+              <div style={{fontWeight:800,color:"var(--navy)"}}>{contact.name}</div>
+              <div style={{fontSize:12,color:"var(--g6)"}}>{contact.email}{contact.phone?` · ${contact.phone}`:""}{contact.company?` · ${contact.company}`:""}</div>
+              <div style={{fontSize:11,marginTop:2,color:contact.hasAccount?"var(--green)":"var(--orange)"}}>{contact.hasAccount?"✓ Has BTOP account (credit-eligible)":"○ No account — not credit-eligible"}</div>
+            </div>
+            <button onClick={()=>setPickContact("")} className="btn bsm bs">Change</button>
           </div>
-          {contact&&!contact.hasAccount&&<div style={{marginTop:10,padding:"10px 12px",background:"#FEF3C7",border:"1px solid #FDE68A",borderRadius:10,fontSize:12,color:"#92400E"}}>⚠ This contact has <strong>no BTOP account</strong>. They are <strong>not eligible for credit</strong>. To use credit they must create an account with the required data. {sendMagicLink&&<button onClick={()=>sendMagicLink(contact)} style={{marginLeft:6,background:"none",border:"none",color:"var(--b6)",fontWeight:700,cursor:"pointer",textDecoration:"underline"}}>Send account invite (magic link)</button>}</div>}
-          {addingC&&<div style={{marginTop:10,padding:14,background:"var(--g0)",borderRadius:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          :<div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+            <select className="inf" style={{maxWidth:360}} value={pickContact} onChange={e=>setPickContact(e.target.value)}><option value="">Select an existing contact…</option>{contacts.map(c=><option key={c.id} value={c.email}>{c.name} — {c.email}{c.hasAccount?"":" (no account)"}</option>)}</select>
+            <span style={{fontSize:12,color:"var(--g4)"}}>or</span>
+            <button onClick={()=>setAddingC(!addingC)} className="btn bsm bs">＋ New contact</button>
+          </div>}
+          {contact&&!contact.hasAccount&&<div style={{marginTop:10,padding:"10px 12px",background:"#FEF3C7",border:"1px solid #FDE68A",borderRadius:10,fontSize:12,color:"#92400E"}}>⚠ This contact has <strong>no BTOP account</strong>, so they are <strong>not eligible for credit</strong>. You can still schedule a reservation. {sendMagicLink&&<button onClick={()=>sendMagicLink(contact)} style={{marginLeft:6,background:"none",border:"none",color:"var(--b6)",fontWeight:700,cursor:"pointer",textDecoration:"underline"}}>Send account invite (magic link)</button>}</div>}
+          {!contact&&addingC&&<div style={{marginTop:10,padding:14,background:"var(--g0)",borderRadius:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             <div className="ig"><label>Full name *</label><input className="inf" value={nc.name} onChange={e=>setNc({...nc,name:e.target.value})}/></div>
             <div className="ig"><label>Email *</label><input className="inf" value={nc.email} onChange={e=>setNc({...nc,email:e.target.value})}/></div>
             <div className="ig"><label>Phone</label><input className="inf" value={nc.phone} onChange={e=>setNc({...nc,phone:e.target.value})}/></div>
             <div className="ig"><label>Company</label><input className="inf" value={nc.company} onChange={e=>setNc({...nc,company:e.target.value})}/></div>
             <div style={{gridColumn:"1/3",fontSize:11,color:"var(--g5)"}}>Sales can create contacts, but not accounts. The client sets their own password via a magic link.</div>
-            <button onClick={createContact} className="btn bp bsm" style={{gridColumn:"1/3",justifyContent:"center"}}>Create contact</button>
+            <button onClick={createContact} className="btn bp bsm" style={{gridColumn:"1/3",justifyContent:"center"}}>Create &amp; select contact</button>
           </div>}
         </div>
-        {/* UNIT + DATES */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:16}}>
-          <div className="ig"><label>Vehicle / equipment</label><select className="inf" value={unitId} onChange={e=>setUnitId(e.target.value)}><option value="">Select…</option>{avail.map(v=><option key={v.id} value={v.id}>{v.name} · {v.plate||v.id}</option>)}</select></div>
-          <div className="ig"><label>Start</label><input className="inf" type="date" value={sd} onChange={e=>setSd(e.target.value)}/></div>
-          <div className="ig"><label>End</label><input className="inf" type="date" value={ed} onChange={e=>setEd(e.target.value)}/></div>
+
+        {/* STEP 2 — CATALOG */}
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:contact?"var(--b6)":"var(--g4)",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Step 2 · Build the reservation</div>
+          <div style={{padding:16,background:"var(--g0)",borderRadius:12,marginBottom:14,fontSize:13,color:"var(--g6)"}}>
+            You'll be taken to the live catalog. Add every vehicle and storage space the customer needs (dates, mileage, deposits are calculated automatically), then open the cart and press <strong>Schedule</strong>. The reservation is left <strong>Pending</strong> for admin validation — no payment or signature is taken now, and nothing is added to the customer's price.
+            <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid var(--g2)",fontSize:12,color:"var(--b7)"}}>Your commission ({polLabel}) accrues from company margin only when the admin validates the reservation.</div>
+          </div>
+          <button onClick={launchBooking} disabled={!contact} className="btn bp blg" style={{width:"100%",justifyContent:"center",opacity:contact?1:.5,cursor:contact?"pointer":"not-allowed"}}><X n="truck" s={18}/>{contact?`Add vehicles & storage for ${contact.name.split(" ")[0]} →`:"Select a customer first"}</button>
         </div>
-        {unit&&days>0&&<div style={{padding:16,background:"var(--g0)",borderRadius:12,marginBottom:16}}>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:14,marginBottom:4}}><span style={{color:"var(--g5)"}}>{days} day(s) · {unit.name}</span><span style={{fontWeight:700}}>Rental {$(rent)}</span></div>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:14}}><span style={{color:"var(--g5)"}}>Deposit</span><span style={{fontWeight:700}}>{$(deposit)}</span></div>
-          <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid var(--g2)",fontSize:12,color:"var(--b7)"}}>Your commission if validated: <strong>{$f(commissionPolicy?.mode==="fixed"?(Number(commissionPolicy.value)||0):rent*((Number(commissionPolicy?.value)||0)/100))}</strong> (from company margin, not charged to the client)</div>
-        </div>}
-        <button onClick={doSchedule} className="btn bp blg" style={{width:"100%",justifyContent:"center"}}><X n="cal" s={18}/>Schedule reservation (awaiting admin validation)</button>
+      </div>}
+
+      {tab==="account"&&<div className="cd" style={{padding:24,maxWidth:520}}>
+        <h3 style={{fontWeight:800,fontSize:18,color:"var(--navy)",marginBottom:4}}>My account</h3>
+        <p style={{fontSize:13,color:"var(--g5)",marginBottom:18}}>Keep your contact details current and change your own password. Your role and commission policy are managed by the admin.</p>
+        <div style={{display:"grid",gap:12}}>
+          <div className="ig"><label>Display name</label><input className="inf" value={acc.name} onChange={e=>setAcc({...acc,name:e.target.value})}/></div>
+          <div className="ig"><label>Email (login)</label><input className="inf" value={user.email} disabled style={{background:"var(--g1)",color:"var(--g5)"}}/></div>
+          <div className="ig"><label>Phone</label><input className="inf" value={acc.phone} onChange={e=>setAcc({...acc,phone:e.target.value})}/></div>
+          <div style={{borderTop:"1px solid var(--g2)",paddingTop:12,marginTop:4,fontWeight:700,fontSize:13,color:"var(--navy)"}}>Change password <span style={{fontWeight:400,fontSize:11,color:"var(--g4)"}}>(optional — leave blank to keep current)</span></div>
+          <div className="ig"><label>New password</label><input className="inf" type="password" value={acc.pw} onChange={e=>setAcc({...acc,pw:e.target.value})}/></div>
+          <div className="ig"><label>Confirm new password</label><input className="inf" type="password" value={acc.pw2} onChange={e=>setAcc({...acc,pw2:e.target.value})}/></div>
+          <button onClick={saveAccount} className="btn bp" style={{justifyContent:"center"}}>Save changes</button>
+        </div>
       </div>}
 
       {tab==="commissions"&&<div className="cd" style={{padding:0,overflow:"hidden"}}>
@@ -3532,7 +3556,9 @@ function CommissionsMod({orders=[],users=[],commissionPolicy,setCommissionPolicy
     const accrued=earnedO.reduce((s,o)=>s+commissionAmount(o,commissionPolicy),0);
     const paid=earnedO.filter(o=>o.commissionPaid).reduce((s,o)=>s+commissionAmount(o,commissionPolicy),0);
     const rangeComm=earnedO.filter(inRange).reduce((s,o)=>s+commissionAmount(o,commissionPolicy),0);
-    return {email,name:nameFor(email),total:all.length,earned:earnedO.length,accrued,paid,pending:accrued-paid,rangeComm};
+    const pendingO=all.filter(o=>o.status==="Pending");
+    const projected=pendingO.reduce((s,o)=>s+commissionAmount(o,commissionPolicy),0);
+    return {email,name:nameFor(email),total:all.length,earned:earnedO.length,accrued,paid,pending:accrued-paid,rangeComm,pendingCount:pendingO.length,projected};
   }).sort((a,b)=>b.accrued-a.accrued);
   const teamSales=withRep.filter(isEarned).length;
   const teamAccrued=rows.reduce((s,r)=>s+r.accrued,0);
@@ -3567,9 +3593,10 @@ function CommissionsMod({orders=[],users=[],commissionPolicy,setCommissionPolicy
     {/* PER REP */}
     <SC title={`Sales team (${rows.length})`} padded={false}>
       {rows.length===0?<div className="text-center py-14 text-stone-400 text-sm">No sales-attributed reservations yet.</div>
-      :<DT headers={["Salesperson","Sales (validated)","Accrued","Paid","Pending","In range",""]} rows={rows.map(r=>[
+      :<DT headers={["Salesperson","Sales (validated)","Awaiting validation","Accrued","Paid","Pending","In range",""]} rows={rows.map(r=>[
         <div><div className="font-semibold text-sm">{r.name}</div><div className="text-[10px] text-stone-400">{r.email} · {r.total} total</div></div>,
         <Pill tone="blue">{r.earned}</Pill>,
+        r.pendingCount>0?<div className="text-xs"><Pill tone="amber">{r.pendingCount}</Pill><div className="text-[10px] text-amber-700 mt-0.5">≈{$f(r.projected)} projected</div></div>:<span className="text-stone-300 text-xs">—</span>,
         <span className="font-semibold">{$f(r.accrued)}</span>,
         <span className="text-emerald-700 font-medium">{$f(r.paid)}</span>,
         <span className={`font-semibold ${r.pending>0?"text-amber-700":"text-stone-400"}`}>{$f(r.pending)}</span>,
@@ -3610,6 +3637,8 @@ function InvitePage({invite,onAccept,sv}){
 export default function App(){
   const [view,setView]=useState("home");
   const [user,setUser]=useState(null);
+  /* Sales "book on behalf of": the contact a salesperson is currently booking a full cart for (public catalog reused). null = normal shopping. */
+  const [onBehalf,setOnBehalf]=useState(null);
   /* Alarm: plays a looping beep when a new reservation comes in, until admin opens Reservations */
   const [alarmEnabled,setAlarmEnabled]=useState(true);
   const [alarmActive,setAlarmActive]=useState(false);
@@ -3992,6 +4021,36 @@ export default function App(){
     if(alarmEnabled&&!auto)setAlarmActive(true);
     setCart([]);setView("client");
   };
+  /* Sales "book on behalf of a contact": reuses the whole public catalog + cart, then schedules the cart as Pending orders for that contact (tagged salesRep). No payment/signature — that's for the client/admin later. */
+  const scheduleCartBySales=()=>{
+    if(!onBehalf){t("Select a customer first","error");return}
+    if(!cart.length){t("Add at least one vehicle or storage space to the cart","error");return}
+    for(const item of cart){if(!item.uid||!item.sd||!item.ed)continue;const otherCart=cart.filter(c=>c!==item);if(!unitFreeInRange({id:item.uid},fleetBookings,item.sd,item.ed,otherCart,orders)){t(`${item.un||"Unit"} is no longer available. Remove and re-select.`,"error");return;}}
+    const invBase="INV-"+String(orders.length+100).padStart(4,"0");
+    const today=new Date().toISOString().split("T")[0];
+    const expISO=new Date(Date.now()+PENDING_TTL_DAYS*86400000).toISOString();
+    const gid="GRP-"+Math.random().toString(36).substr(2,8).toUpperCase();
+    const nw=cart.map((i,idx)=>({...i,oid:"ORD-"+Math.random().toString(36).substr(2,8).toUpperCase(),gid,invNum:invBase+(cart.length>1?"-"+(idx+1):""),status:"Pending",payState:"awaiting_validation",approvedAt:null,expiresAt:expISO,phase:"reservation",od:today,ue:onBehalf.email,un:onBehalf.name,payMethod:"cash",dp:i.dp||0,reservationPaid:i.dp||0,settlementStatus:"pending",settlementTotal:0,settlementNotes:"",settlementPaid:false,salesRep:user.email,bySales:true}));
+    setOrders(p=>[...p,...nw]);
+    setDeliveries(p=>[...nw.map(o=>({id:"d"+Date.now()+"_"+Math.random().toString(36).slice(2,6),oid:o.oid,invNum:o.invNum,client:o.un,vehicle:o.un||o.un2||"Vehicle",vid:o.uid,plate:o.plate||"",start:dateToStr(o.sd),end:dateToStr(o.ed),status:"pending",milesOut:"",fuelOut:"",conditionOut:"",notesOut:"",milesIn:"",fuelIn:"",conditionIn:"",notesIn:"",damaged:false,damageDesc:"",deliveredBy:"",returnedBy:""})),...p]);
+    const spaceOrders=nw.filter(o=>o.uid&&String(o.uid).startsWith("sp-"));
+    if(spaceOrders.length>0)setSpaces(prev=>prev.map(sp=>{const matched=spaceOrders.find(o=>o.uid==="sp-"+sp.id);if(!matched)return sp;const rentalEntry={oid:matched.oid,invNum:matched.invNum,tenant:matched.un,tenantEmail:matched.ue,tenantPhone:onBehalf.phone||"",leaseStart:dateToStr(matched.sd),leaseEnd:dateToStr(matched.ed)};if(sp.inventoryEnabled){const newRentals=[...(sp.activeRentals||[]),rentalEntry];const remaining=Math.max(0,(sp.totalStock||0)-newRentals.length);return{...sp,activeRentals:newRentals,status:remaining===0?"sold-out":"available"};}return{...sp,status:"occupied",...rentalEntry,activeOid:matched.oid,activeInvNum:matched.invNum};}));
+    if(cartCode){setCarts(prev=>prev.map(c=>c.code===cartCode?{...c,status:"converted",updatedAt:nowISO(),orderRefs:nw.map(o=>o.oid),owner:onBehalf.name,email:onBehalf.email}:c));setCartCode(null);}
+    if(alarmEnabled)setAlarmActive(true);
+    setCart([]);setCartOpen(false);
+    const nm=onBehalf.name;setOnBehalf(null);
+    t(`${nw.length} reservation(s) scheduled for ${nm} — awaiting admin validation`,"success");
+    setView("sales");
+  };
+  /* Employee light self-service: update own display name / phone / password (staff manage their own account) */
+  const updateMyAccount=({name,phone,password})=>{
+    if(!user)return false;
+    if(password&&password.length<4){t("Password must be at least 4 characters","error");return false}
+    setUsers(p=>p.map(u=>u.email===user.email?{...u,name:name??u.name,phone:phone??u.phone,...(password?{pw:password}:{})}:u));
+    setUser(u=>({...u,name:name??u.name,phone:phone??u.phone}));
+    t(password?"Account updated — password changed":"Account updated","success");
+    return true;
+  };
   const doLogin=(email,pw)=>{
     const f=users.find(u=>u.email===email&&u.pw===pw);
     if(!f){t("Invalid credentials","error");return false}
@@ -4092,7 +4151,13 @@ body{font-family:var(--f);background:var(--g0);color:var(--g9)}input,select,text
       {view==="book"&&<Bk fleet={fleet} ac={addCart} sv={setView} t={t} bookings={fleetBookings}/>}
       {view==="admin"&&user?.role==="admin"&&<Ad fleet={fleet} sf={setFleet} spaces={spaces} setSpaces={setSpaces} contacts={contacts} setContacts={setContacts} orders={orders} setOrders={setOrders} t={t} sv={setView} messages={messages} setMessages={setMessages} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} logout={logout} alarmEnabled={alarmEnabled} setAlarmEnabled={setAlarmEnabled} alarmActive={alarmActive} setAlarmActive={setAlarmActive} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars} carts={carts} setCarts={setCarts} contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl} creditLines={creditLines} setCreditLines={setCreditLines} approveOrder={approveOrder} rejectOrder={rejectOrder} company={company} setCompany={setCompany} clientDocsAll={clientDocsAll} depositReturnAll={depositReturnAll} signaturesAll={signaturesAll} saveMySignature={saveMySignature} mySignature={mySignature} contractPolicy={contractPolicy} setContractPolicy={setContractPolicy} signContractAsBtop={signContractAsBtop} sendAgreementNow={sendAgreementNow} commissionPolicy={commissionPolicy} setCommissionPolicy={setCommissionPolicy} authUsers={users} sendMagicLink={sendMagicLink}/>}
       {view==="hqfield"&&(user?.role==="sede"||user?.role==="admin")&&<FieldHQ fleet={fleet} spaces={spaces} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} user={user} sv={setView} logout={logout}/>}
-      {view==="sales"&&(user?.role==="sales"||user?.role==="admin")&&<SalesPanel user={user} sv={setView} logout={logout} t={t} contacts={contacts} setContacts={setContacts} fleet={fleet} orders={orders} fleetBookings={fleetBookings} scheduleSale={scheduleSale} commissionPolicy={commissionPolicy} sendMagicLink={sendMagicLink}/>}
+      {view==="sales"&&(user?.role==="sales"||user?.role==="admin")&&<SalesPanel user={user} sv={setView} logout={logout} t={t} contacts={contacts} setContacts={setContacts} fleet={fleet} orders={orders} fleetBookings={fleetBookings} scheduleSale={scheduleSale} commissionPolicy={commissionPolicy} sendMagicLink={sendMagicLink} startBooking={(c)=>{setOnBehalf(c);setView("fleet")}} updateMyAccount={updateMyAccount}/>}
+      {/* On-behalf booking banner — shows while a salesperson builds a cart for a contact on the public catalog */}
+      {onBehalf&&["home","fleet","storage"].includes(view)&&<div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:90,background:"#1E3A5F",color:"#fff",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:14,flexWrap:"wrap",boxShadow:"0 -4px 16px rgba(0,0,0,.18)"}}>
+        <span style={{fontSize:13}}>🧾 Booking for <strong>{onBehalf.name}</strong>{onBehalf.email?` · ${onBehalf.email}`:""} — add vehicles & storage, then open the cart to schedule.</span>
+        <button onClick={()=>setCartOpen(true)} style={{background:"#fff",color:"#1E3A5F",border:"none",borderRadius:20,padding:"6px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}>Open cart ({cart.length})</button>
+        <button onClick={()=>{setOnBehalf(null);setView("sales")}} style={{background:"rgba(255,255,255,.12)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:20,padding:"6px 14px",fontWeight:600,fontSize:12,cursor:"pointer"}}>Cancel</button>
+      </div>}
       {view==="invite"&&<InvitePage invite={invites.find(i=>i.token===inviteToken)} onAccept={(pw)=>{if(acceptInvite(inviteToken,pw))setView("client")}} sv={setView}/>}
       {view==="checkout"&&user&&<CheckoutPage cart={cart} rmCart={rmCart} cTotal={cTotal} user={user} confirm={confirmOrder} cancel={()=>setView("home")} sv={setView} company={company} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} creditUsed={orders.filter(o=>(o.payMethod==="credit"||o.payMethod==="invoice")&&o.ue===user.email&&o.status!=="Cancelled"&&!o.settlementPaid).reduce((s,o)=>s+(o.tp||0),0)} savedPays={savedPays} mySignature={mySignature} saveMySignature={saveMySignature}/>}
       {view==="client"&&user?.role==="client"&&<Cl orders={orders.filter(o=>o.ue===user.email)} sv={setView} user={user} contacts={contacts} setContacts={setContacts} logout={logout} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} orders_all={orders} savedPays={savedPays} setSavedPays={setSavedPays} t={t} clientDocs={clientDocs} addClientDoc={addClientDoc} removeClientDoc={removeClientDoc} depositReturnPref={depositReturnPref} setDepositReturnPref={setDepositReturnPref} mySignature={mySignature} saveMySignature={saveMySignature}/>}
@@ -4131,7 +4196,12 @@ body{font-family:var(--f);background:var(--g0);color:var(--g9)}input,select,text
             <span style={{fontWeight:600,color:"var(--navy)"}}>Total</span>
             <span style={{fontSize:24,fontWeight:800,color:"var(--navy)"}}>{$(cTotal)}</span>
           </div>
-          {user?<button onClick={goCheckout} style={{width:"100%",padding:"14px 0",background:"var(--b6)",color:"#fff",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}}>Proceed to Checkout</button>
+          {onBehalf?<div>
+            <div style={{padding:"10px 12px",background:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:10,fontSize:12,color:"#1E40AF",marginBottom:10}}>Booking on behalf of <strong>{onBehalf.name}</strong>. No charge or signature now — the reservation is left <strong>Pending</strong> for admin validation.</div>
+            <button onClick={scheduleCartBySales} style={{width:"100%",padding:"14px 0",background:"var(--b6)",color:"#fff",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}}>Schedule {cart.length} item(s) for {onBehalf.name.split(" ")[0]}</button>
+            <button onClick={()=>{setOnBehalf(null);setCartOpen(false);setView("sales")}} style={{width:"100%",padding:"10px 0",marginTop:8,background:"none",color:"var(--g6)",border:"1px solid var(--g3)",borderRadius:12,fontSize:13,fontWeight:600,cursor:"pointer"}}>Cancel — back to Sales Panel</button>
+          </div>
+          :user?<button onClick={goCheckout} style={{width:"100%",padding:"14px 0",background:"var(--b6)",color:"#fff",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}}>Proceed to Checkout</button>
           :<div>
             <p style={{fontSize:13,color:"var(--g5)",textAlign:"center",marginBottom:12}}>Sign in to complete your booking</p>
             <button onClick={()=>{setCartOpen(false);setView("login")}} style={{width:"100%",padding:"14px 0",background:"var(--b6)",color:"#fff",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}}>Sign In to Checkout</button>
@@ -5277,7 +5347,7 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
           {section==="settlement"&&<SettlementMod orders={orders} setOrders={setOrders} deliveries={deliveries} fleet={fleet}/>}
           {section==="contacts"&&<ContactsMod contacts={contacts} setContacts={setContacts} orders={orders} clientDocsAll={clientDocsAll} depositReturnAll={depositReturnAll} sendMagicLink={sendMagicLink}/>}
           {section==="carts"&&<CartsMod carts={carts} setCarts={setCarts} contacts={contacts}/>}
-          {section==="orderspay"&&<OrdersPayMod orders={orders} setOrders={setOrders} approveOrder={approveOrder} rejectOrder={rejectOrder}/>}
+          {section==="orderspay"&&<OrdersPayMod orders={orders} setOrders={setOrders} approveOrder={approveOrder} rejectOrder={rejectOrder} authUsers={authUsers}/>}
           {section==="credit"&&<CreditMod creditLines={creditLines} setCreditLines={setCreditLines} orders={orders} contacts={contacts}/>}
           {section==="commissions"&&<CommissionsMod orders={orders} users={authUsers} commissionPolicy={commissionPolicy} setCommissionPolicy={setCommissionPolicy} setOrders={setOrders}/>}
           {section==="contracts"&&<ContractsMod contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl} signaturesAll={signaturesAll} company={company} setCompany={setCompany} contractPolicy={contractPolicy} setContractPolicy={setContractPolicy} signContractAsBtop={signContractAsBtop} sendAgreementNow={sendAgreementNow}/>}
