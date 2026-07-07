@@ -3998,7 +3998,15 @@ export default function App(){
     /* Block login if the matching contact is disabled */
     const contact=contacts.find(c=>c.email===email);
     if(contact&&contact.disabled){t("This account has been disabled. Please contact a BTOP advisor to reactivate it.","error");return false}
-    setUser(f);return true;
+    setUser(f);
+    /* Staff (non-client) go straight to their panel with a welcome toast — avoids booking from the public side by mistake */
+    if(f.role!=="client"){
+      const dest=f.role==="admin"?"admin":f.role==="sede"?"hqfield":f.role==="sales"?"sales":"home";
+      setView(dest);
+      const roleLbl=f.role==="admin"?"Admin":f.role==="sede"?"Headquarters":f.role==="sales"?"Sales":"";
+      t(`Welcome back, ${f.name.split(" ")[0]} — ${roleLbl} panel`,"success");
+    }
+    return f;
   };
   const doReg=(name,email,pw,phone="")=>{if(users.find(u=>u.email===email)){t("Email exists","error");return false}const nu={email,pw,role:"client",name,phone};setUsers(p=>[...p,nu]);setUser(nu);
     /* Mirror new client into the contacts directory so admin sees them (with phone/email for contact) */
@@ -5082,7 +5090,7 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},cred
   </div></div>;
 }
 
-function Lo({dl,sv}){const [em,sem]=useState("");const [pw,spw]=useState("");const [sh,ssh]=useState(false);const go=()=>{if(dl(em,pw))sv("home")};
+function Lo({dl,sv}){const [em,sem]=useState("");const [pw,spw]=useState("");const [sh,ssh]=useState(false);const go=()=>{const u=dl(em,pw);if(u&&u.role==="client")sv("home")};
   return <div className="fi" style={{minHeight:"80vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"linear-gradient(135deg,var(--b0),var(--g0))"}}>
     <div className="cd" style={{maxWidth:440,width:"100%",padding:40}}>
       <div style={{textAlign:"center",marginBottom:32}}><div style={{width:60,height:60,borderRadius:16,background:"linear-gradient(135deg,var(--b6),var(--b4))",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><X n="lock" s={28} c="#fff"/></div><h2 style={{fontSize:24,fontWeight:800,color:"var(--navy)"}}>Welcome Back</h2></div>
