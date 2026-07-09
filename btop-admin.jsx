@@ -11,12 +11,12 @@ import {
 
 /* ─── DATA ─── */
 const FLEET = [
-  { id:"990", name:"Ottawa Yard Spotter", year:2007, type:"Mula", cat:"Yard Spotter", daily:250, weekly:1000, monthly:3800, rateMile:0, depD:200, depW:500, depM:500, img:"🚛", desc:"Heavy-duty yard jockey for moving trailers in tight spaces." },
-  { id:"16000", name:"Freightliner Cascadia", year:2016, type:"Daycab", cat:"Semi Truck", daily:165, weekly:875, monthly:3600, rateMile:0.15, depD:200, depW:500, depM:1200, img:"🚚", desc:"Fuel-efficient Cascadia daycab for regional hauling." },
-  { id:"821281", name:"Wabash Van Trailer", year:2018, type:"40ft S/A w/Liftgate", cat:"Trailer", daily:200, weekly:450, monthly:850, rateMile:0, depD:100, depW:300, depM:500, img:"📦", desc:"40ft van trailer with liftgate for freight logistics." },
-  { id:"1116", name:"Mitsubishi Forklift", year:2016, type:"5,000lb Capacity", cat:"Forklift", daily:450, weekly:1100, monthly:2500, rateMile:0, depD:200, depW:300, depM:500, img:"🏗️", desc:"5,000lb capacity forklift for warehouse ops." },
-  { id:"1317", name:"Dodge Ram Pick Up", year:2014, type:"2 Door – 8ft Bed", cat:"Pickup", daily:50, weekly:300, monthly:1000, rateMile:0, depD:200, depW:300, depM:500, img:"🛻", desc:"Reliable pickup with 8ft bed for light use." },
-  { id:"1212", name:"GMC 3500 Box Truck", year:2020, type:"16ft", cat:"Box Truck", daily:60, weekly:300, monthly:1300, rateMile:0.15, depD:100, depW:150, depM:500, img:"🚐", desc:"16ft box truck, perfect for moving & deliveries." },
+  { id:"990", name:"Ottawa Yard Spotter", year:2007, type:"YT30 Spotter", cat:"Yard Spotter", daily:250, weekly:1000, monthly:3800, rateMile:0, depD:200, depW:500, depM:500, img:"🚛", desc:"Cummins diesel · Allison automatic · hydraulic-lift 5th wheel." },
+  { id:"17137", name:"Freightliner Cascadia", year:2017, type:"T/A Day Cab (Auto)", cat:"Daycab", daily:165, weekly:875, monthly:3600, rateMile:0, depD:200, depW:500, depM:1200, img:"🚚", desc:"Detroit DD13 410hp · 10-speed automatic daycab." },
+  { id:"1317", name:"Ram 1500 Tradesman", year:2014, type:"2 Door – 8ft Bed", cat:"Pickup", daily:50, weekly:300, monthly:1000, rateMile:0, depD:200, depW:300, depM:500, img:"🛻", desc:"5.7 V8 · spray-on bed liner · 8ft bed." },
+  { id:"1212", name:"GMC 3500 Box Truck", year:2020, type:"16ft", cat:"Box Truck", daily:60, weekly:300, monthly:1300, rateMile:0.15, depD:100, depW:150, depM:500, img:"📦", desc:"16ft Supreme Corp box · walk-in ramp." },
+  { id:"1116", name:"Mitsubishi Forklift", year:2016, type:"5,000lb Capacity", cat:"Forklift", daily:180, weekly:540, monthly:1620, rateMile:0, depD:200, depW:300, depM:500, img:"🏗️", desc:"5,000lb · 3-stage mast · side shift." },
+  { id:"0410", name:"Nilfisk Liberty SC60 Scrubber", year:2022, type:"Ride-On Floor Scrubber", cat:"Floor Scrubber", daily:325, weekly:975, monthly:2900, rateMile:0, depD:150, depW:400, depM:1200, img:"🧽", desc:"24V ride-on electric floor scrubber." },
 ];
 const USERS_INIT = [
   { email:"admin@btop.com", pw:"admin123", role:"admin", name:"Admin BTOP", phone:"+1 469 690 712" },
@@ -28,7 +28,11 @@ const USERS_INIT = [
 
 
 /* ═══ ADMIN PANEL DATA ═══ */
-const CATS={"Vehicles":["Daycab","Sleeper","Yard Spotter","Pickup","Flatbed","Dump Truck"],"Equipment":["Forklift","Skid Steer","Backhoe","Excavator","Mini Excavator","Telehandler","Generator","Light Tower","Air Compressor","Sweeper","Platform"]};
+const CATS={"Vehicles":["Daycab","Yard Spotter","Pickup","Box Truck"],"Equipment":["Forklift","Loading Ramp","Trencher","Air Conditioning","Dolly","Floor Scrubber","Concrete Saw","Canopy","Cooler","Propane Tank"]};
+const VEHICLE_CATS=CATS.Vehicles;
+/* Centralized category → emoji icon (used by every fleet seed/mapping) */
+const CAT_ICON={"Yard Spotter":"🚛","Daycab":"🚚","Pickup":"🛻","Box Truck":"📦","Forklift":"🏗️","Loading Ramp":"🛗","Trencher":"⛏️","Air Conditioning":"❄️","Dolly":"🛒","Floor Scrubber":"🧽","Concrete Saw":"🪚","Canopy":"⛺","Cooler":"🧊","Propane Tank":"🛢️"};
+const catIcon=(c)=>CAT_ICON[c]||"🚐";
 const ALL_CATS=Object.values(CATS).flat();
 const FUELS=["Diesel","Gasoline","Electric","LP Gas","Hybrid","N/A"];
 const TRANS=["Automatic","Manual","CVT","N/A"];
@@ -43,30 +47,38 @@ const HERO_IMG="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST
 /* ═══ SEED DATA ═══ */
 const blankP=()=>({id:"",name:"",category:"Daycab",plate:"",vin:"",year:2024,make:"",model:"",status:"available",daily:0,weekly:0,monthly:0,depositDaily:0,depositWeekly:0,depositMonthly:0,mileDaily:0,mileWeekly:0,mileMonthly:0,mileTiers:[],shortDesc:"",fuelType:"Diesel",fuelTankSize:100,fuelPricePerGallon:4.5,transmission:"Automatic"});
 
-const admSeedFleet=[
-  {...blankP(),id:"v1",name:"Ottawa Yard Spotter",category:"Yard Spotter",year:2007,make:"Ottawa",model:"YS",plate:"TX-990",status:"available",daily:250,weekly:1000,monthly:3800,depositDaily:200,depositWeekly:500,depositMonthly:500,mileDaily:0,mileWeekly:0,mileMonthly:0,mileTiers:[],shortDesc:"Heavy-duty yard jockey."},
-  {...blankP(),id:"v1b",name:"Ottawa Yard Spotter",category:"Yard Spotter",year:2007,make:"Ottawa",model:"YS",plate:"TX-991",status:"available",daily:250,weekly:1000,monthly:3800,depositDaily:200,depositWeekly:500,depositMonthly:500,mileDaily:0,mileWeekly:0,mileMonthly:0,mileTiers:[],shortDesc:"Heavy-duty yard jockey."},
-  {...blankP(),id:"v2",name:"Freightliner Cascadia",category:"Daycab",year:2016,make:"Freightliner",model:"Cascadia",plate:"TX-16000",status:"rented",daily:165,weekly:875,monthly:3600,depositDaily:200,depositWeekly:500,depositMonthly:1200,mileDaily:0.15,mileWeekly:0.15,mileMonthly:0.15,mileTiers:[{upTo:100,rate:0.15},{upTo:500,rate:0.12},{upTo:0,rate:0.10}],shortDesc:"Regional hauling daycab."},
-  {...blankP(),id:"v2b",name:"Freightliner Cascadia",category:"Daycab",year:2016,make:"Freightliner",model:"Cascadia",plate:"TX-16001",status:"available",daily:165,weekly:875,monthly:3600,depositDaily:200,depositWeekly:500,depositMonthly:1200,mileDaily:0.15,mileWeekly:0.15,mileMonthly:0.15,mileTiers:[{upTo:100,rate:0.15},{upTo:500,rate:0.12},{upTo:0,rate:0.10}],shortDesc:"Regional hauling daycab."},
-  {...blankP(),id:"v3",name:"Wabash Van Trailer",category:"Flatbed",year:2018,make:"Wabash",model:"VT 40ft",plate:"TX-821281",status:"available",daily:200,weekly:450,monthly:850,depositDaily:100,depositWeekly:300,depositMonthly:500,mileDaily:0,mileWeekly:0,mileMonthly:0,mileTiers:[],specialLift:true,shortDesc:"40ft trailer w/ liftgate."},
-  {...blankP(),id:"v3b",name:"Wabash Van Trailer",category:"Flatbed",year:2018,make:"Wabash",model:"VT 40ft",plate:"TX-821282",status:"available",daily:200,weekly:450,monthly:850,depositDaily:100,depositWeekly:300,depositMonthly:500,mileDaily:0,mileWeekly:0,mileMonthly:0,mileTiers:[],specialLift:true,shortDesc:"40ft trailer w/ liftgate."},
-  {...blankP(),id:"v4",name:"Mitsubishi Forklift",category:"Forklift",year:2016,make:"Mitsubishi",model:"FG25N",plate:"TX-1116",status:"maintenance",daily:450,weekly:1100,monthly:2500,depositDaily:200,depositWeekly:300,depositMonthly:500,fuelType:"LP Gas",eqCapacity:"5,000 lbs",eqHours:"3200",shortDesc:"5,000lb forklift."},
-  {...blankP(),id:"v4b",name:"Mitsubishi Forklift",category:"Forklift",year:2016,make:"Mitsubishi",model:"FG25N",plate:"TX-1117",status:"available",daily:450,weekly:1100,monthly:2500,depositDaily:200,depositWeekly:300,depositMonthly:500,fuelType:"LP Gas",eqCapacity:"5,000 lbs",eqHours:"1800",shortDesc:"5,000lb forklift."},
-  {...blankP(),id:"v5",name:"Dodge Ram Pick Up",category:"Pickup",year:2014,make:"Dodge",model:"Ram 1500",plate:"TX-1317",status:"available",daily:50,weekly:300,monthly:1000,depositDaily:200,depositWeekly:300,depositMonthly:500,fuelType:"Gasoline",shortDesc:"Pickup 8ft bed."},
-  {...blankP(),id:"v5b",name:"Dodge Ram Pick Up",category:"Pickup",year:2014,make:"Dodge",model:"Ram 1500",plate:"TX-1318",status:"available",daily:50,weekly:300,monthly:1000,depositDaily:200,depositWeekly:300,depositMonthly:500,fuelType:"Gasoline",shortDesc:"Pickup 8ft bed."},
-  {...blankP(),id:"v6",name:"GMC 3500 Box Truck",category:"Dump Truck",year:2020,make:"GMC",model:"3500 16ft",plate:"TX-1212",status:"rented",daily:60,weekly:300,monthly:1300,depositDaily:100,depositWeekly:150,depositMonthly:500,mileDaily:0.15,mileWeekly:0.15,mileMonthly:0.15,mileTiers:[{upTo:200,rate:0.15},{upTo:0,rate:0.10}],shortDesc:"16ft box truck."},
-  {...blankP(),id:"v6b",name:"GMC 3500 Box Truck",category:"Dump Truck",year:2020,make:"GMC",model:"3500 16ft",plate:"TX-1213",status:"available",daily:60,weekly:300,monthly:1300,depositDaily:100,depositWeekly:150,depositMonthly:500,mileDaily:0.15,mileWeekly:0.15,mileMonthly:0.15,mileTiers:[{upTo:200,rate:0.15},{upTo:0,rate:0.10}],shortDesc:"16ft box truck."},
+/* Real BTOP inventory (Laredo, TX). qty>1 expands into that many distinct physical units. */
+const FLEET_SEED=[
+  /* ── VEHICLES ── */
+  {id:"u990",plate:"990",name:"Ottawa Yard Spotter",category:"Yard Spotter",year:2007,make:"Ottawa",model:"YT30",transmission:"Allison Automatic",fuelType:"Diesel",daily:250,weekly:1000,monthly:3800,depositDaily:200,depositWeekly:500,depositMonthly:500,shortDesc:"YT30 4x2 spotter truck · Cummins diesel · Allison automatic · 295/75R22.5 hydraulic-lift 5th wheel."},
+  {id:"u17137",plate:"17137",name:"Freightliner Cascadia",category:"Daycab",year:2017,make:"Freightliner",model:"Cascadia T/A Day Cab",transmission:"10-Speed Automatic",fuelType:"Diesel",daily:165,weekly:875,monthly:3600,depositDaily:200,depositWeekly:500,depositMonthly:1200,shortDesc:"Detroit DD13 12.8L 410hp · 10-speed automatic · air-ride 275/80R22.5 · A/C."},
+  {id:"u16000",plate:"16000",name:"Freightliner Cascadia",category:"Daycab",year:2016,make:"Freightliner",model:"Cascadia T/A Day Cab",transmission:"10-Speed Manual",fuelType:"Diesel",daily:165,weekly:875,monthly:3600,depositDaily:200,depositWeekly:500,depositMonthly:1200,shortDesc:"Detroit DD13 12.8L 410hp · 10-speed manual · air-ride 275/80R22.5 · A/C."},
+  {id:"u1317",plate:"1317",name:"Ram 1500 Tradesman",category:"Pickup",year:2014,make:"Ram",model:"1500 Tradesman 4x2",transmission:"Automatic",fuelType:"Gasoline",daily:50,weekly:300,monthly:1000,depositDaily:200,depositWeekly:300,depositMonthly:500,shortDesc:"2-door · 5.7 V8 gasoline · A/C · spray-on bed liner · 6,600lb GVWR · 8ft bed."},
+  {id:"u1212",plate:"1212",name:"GMC 3500 Box Truck",category:"Box Truck",year:2020,make:"GMC",model:"3500 16ft",transmission:"Automatic",fuelType:"Gasoline",daily:60,weekly:300,monthly:1300,depositDaily:100,depositWeekly:150,depositMonthly:500,mileDaily:0.15,mileWeekly:0.15,mileMonthly:0.15,mileTiers:[{upTo:200,rate:0.15},{upTo:0,rate:0.10}],shortDesc:"4x2 V8 6.0 gasoline · 12,300 GVWR · Supreme Corp 16ft box · walk-in ramp."},
+  /* ── EQUIPMENT ── */
+  {id:"u1116",plate:"1116",name:"Mitsubishi Forklift",category:"Forklift",year:2016,make:"Mitsubishi",model:"FG25N",fuelType:"LP Gas",eqCapacity:"5,000 lbs",daily:180,weekly:540,monthly:1620,depositDaily:200,depositWeekly:300,depositMonthly:500,shortDesc:"5,000lb capacity · 3-stage mast · side shift."},
+  {id:"u6049",plate:"6049",name:"Industrias Loading Ramp",category:"Loading Ramp",year:2025,make:"Industrias America",model:"R820",fuelType:"—",daily:350,weekly:1100,monthly:3000,depositDaily:200,depositWeekly:500,depositMonthly:700,shortDesc:"96in x 21ft · 32,000lb capacity loading ramp."},
+  {id:"u0330",plate:"0330",name:"Vermeer RTX200 Trencher",category:"Trencher",year:2020,make:"Vermeer",model:"RTX200",fuelType:"Gasoline",daily:225,weekly:750,monthly:2100,depositDaily:100,depositWeekly:350,depositMonthly:700,shortDesc:"Walk-behind trencher · Kohler 2-cyl gasoline · hydrostatic drive · 3in x 3ft chain · 8in rubber tracks."},
+  {id:"u5555",plate:"5555",name:"Movincool ClimatePro12 A/C",category:"Air Conditioning",year:2019,make:"Movincool",model:"ClimatePro12",fuelType:"Electric",daily:175,weekly:550,monthly:1650,depositDaily:70,depositWeekly:250,depositMonthly:700,shortDesc:"Portable spot air conditioning unit."},
+  {id:"u1111",plate:"1111",name:"Haul Master Appliance Dolly",category:"Dolly",year:2020,make:"Haul Master",model:"600LB",fuelType:"—",daily:20,weekly:60,monthly:150,depositDaily:7,depositWeekly:25,depositMonthly:70,shortDesc:"600lb appliance hand truck · heavy-duty strap & crank · solid rubber wheels · stair climbers · fold-out box lifter."},
+  {id:"u0410",plate:"0410",name:"Nilfisk Liberty SC60 Scrubber",category:"Floor Scrubber",year:2022,make:"Nilfisk",model:"Liberty SC60",fuelType:"Electric",daily:325,weekly:975,monthly:2900,depositDaily:150,depositWeekly:400,depositMonthly:1200,shortDesc:"Ride-on electric floor scrubber · 24V battery · 32–36in width · up to 70gal tanks · dual-disk brakes."},
+  {id:"u0717",plate:"0717",name:"Starvox XLC-500B Concrete Saw",category:"Concrete Saw",year:2026,make:"Starvox",model:"XLC-500B",fuelType:"Gasoline",daily:150,weekly:500,monthly:1500,depositDaily:50,depositWeekly:150,depositMonthly:400,qty:2,shortDesc:"Walk-behind saw · 15in max blade · 7in max cutting depth · manual raise/lower · Loncin 15hp gasoline."},
+  {id:"u2222",plate:"2222",name:"Pop Up Canopy 10x20ft",category:"Canopy",year:2024,make:"Generic",model:"10x20",fuelType:"—",daily:100,weekly:300,monthly:800,depositDaily:25,depositWeekly:75,depositMonthly:170,shortDesc:"Instant canopy portable gazebo · 3 sidewalls · 2 ventilated windows · height adjustable."},
+  {id:"u3333",plate:"3333",name:"Igloo Polar 120 Qt Cooler",category:"Cooler",year:2023,make:"Igloo",model:"Polar 120Qt",fuelType:"—",daily:20,weekly:80,monthly:100,depositDaily:10,depositWeekly:20,depositMonthly:50,qty:2,shortDesc:"120-quart cooler."},
+  {id:"u3287",plate:"3287",name:"Forklift Propane Tank",category:"Propane Tank",year:2023,make:"Generic",model:"Aluminum w/Gauge",fuelType:"—",daily:10,weekly:25,monthly:70,depositDaily:5,depositWeekly:15,depositMonthly:40,qty:15,shortDesc:"Aluminum forklift propane tank cylinder with gauge."},
 ];
+const admSeedFleet=FLEET_SEED.flatMap(u=>{
+  const {qty=1,...base}=u;
+  if(qty===1)return [{...blankP(),...base,status:"available"}];
+  return Array.from({length:qty},(_,i)=>({...blankP(),...base,status:"available",id:`${base.id}_${i+1}`,plate:`${base.plate}-${i+1}`}));
+});
+/* Real BTOP storage inventory: one warehouse yard product, 160 identical trailer-parking spaces. */
 const admSeedSpaces=[
-  {id:"s1",name:"Yard A – North Lot",type:"Outdoor",size:"Custom",customSize:"5,000 sqft",maxWeight:"45,000 lbs",surface:"Concrete",location:"Zone A, Block 1",access:"24/7",monthly:1200,daily:50,weekly:250,status:"occupied",tenant:"Martinez Logistics",since:"2025-11-01",active:true,branch:"Laredo",docs:[]},
-  {id:"s2",name:"Warehouse B1",type:"Indoor",size:"Custom",customSize:"3,200 sqft",surface:"Concrete",location:"Zone B",access:"business",monthly:2800,status:"occupied",tenant:"Gulf Coast Freight",since:"2026-01-15",active:true,docs:[]},
-  {id:"s3",name:"Parking Bay C",type:"Outdoor",size:"40ft",surface:"Asphalt",location:"Zone C",access:"24/7",monthly:900,status:"available",tenant:"",docs:[],inventoryEnabled:true,totalStock:8,activeRentals:[
-    {oid:"ORD-INV001",invNum:"INV-INV001",tenant:"DHL Express",tenantEmail:"ops@dhl-laredo.com",tenantPhone:"(469) 555-1010",leaseStart:"2026-04-01",leaseEnd:"2026-12-31"},
-    {oid:"ORD-INV002",invNum:"INV-INV002",tenant:"Border Logistics",tenantEmail:"fleet@borderlog.com",tenantPhone:"(469) 555-2020",leaseStart:"2026-03-15",leaseEnd:"2026-09-15"},
-    {oid:"ORD-INV003",invNum:"INV-INV003",tenant:"FastShip Inc",tenantEmail:"yard@fastship.com",tenantPhone:"(469) 555-3030",leaseStart:"2026-04-10",leaseEnd:"2027-04-09"},
+  {id:"s7777",name:"Warehouse Yard – Trailer Parking",type:"Outdoor",size:"Custom",customSize:"Trailer space",maxWeight:"—",surface:"Concrete",location:"Laredo Yard",access:"24/7",daily:15,weekly:75,monthly:150,deposit:0,status:"available",tenant:"",since:"",active:true,branch:"Laredo",internalNotes:"Trailer parking only.",docs:[],inventoryEnabled:true,totalStock:160,activeRentals:[
+    {oid:"ORD-YARD01",invNum:"INV-YARD01",tenant:"Martinez Logistics",tenantEmail:"info@martinez.com",tenantPhone:"(469) 555-0303",leaseStart:"2026-05-01",leaseEnd:"2026-10-31"},
+    {oid:"ORD-YARD02",invNum:"INV-YARD02",tenant:"Gulf Coast Freight",tenantEmail:"ops@gulfcoast.com",tenantPhone:"(469) 555-0404",leaseStart:"2026-06-01",leaseEnd:"2027-05-31"},
+    {oid:"ORD-YARD03",invNum:"INV-YARD03",tenant:"Border Logistics",tenantEmail:"fleet@borderlog.com",tenantPhone:"(469) 555-2020",leaseStart:"2026-04-10",leaseEnd:"2026-12-31"},
   ]},
-  {id:"s4",name:"Yard D – South",type:"Outdoor",size:"Custom",customSize:"8,000 sqft",surface:"Gravel",access:"24/7",monthly:1800,status:"available",docs:[]},
-  {id:"s5",name:"Cold Storage E",type:"Refrigerated",size:"20ft",surface:"Concrete",access:"business",monthly:3500,status:"occupied",tenant:"Fresh Produce Inc.",since:"2026-02-01",docs:[]},
 ];
 const admSeedBookings=[
   {id:"b1",client:"Carlos Mendez",unit:"Freightliner Cascadia",type:"truck",start:"2026-04-10",end:"2026-04-24",total:2450,deposit:500,status:"active",phone:"(469) 555-0101",email:"carlos@email.com"},
@@ -213,7 +225,7 @@ function ProductEditor({item,onClose,onSave}){
   const [p,setP]=useState(item?{...item}:blankP());
   const [tab,setTab]=useState("basic");
   const u=(k,v)=>setP(prev=>({...prev,[k]:v}));
-  const isEquip=!["Daycab","Sleeper","Yard Spotter","Pickup","Flatbed","Dump Truck"].includes(p.category);
+  const isEquip=!VEHICLE_CATS.includes(p.category);
   const isNew=!item;
   const tabs=[{id:"basic",label:"Product",icon:Tag},{id:"pricing",label:"Pricing",icon:DollarSign},{id:"specs",label:"Specs",icon:Gauge},{id:"fuel",label:"Fuel",icon:Droplets},{id:"status",label:"Status",icon:CircleDot},{id:"docs",label:"Documents",icon:FileText},{id:"rules",label:"Rules",icon:Shield},{id:"commercial",label:"Commercial",icon:Info},{id:"controls",label:"Internal",icon:Lock}];
   const addDoc=(name)=>{const docs=[...(p.docs||[]),{name,date:new Date().toISOString().split("T")[0],id:nid()}];u("docs",docs)};
@@ -1018,8 +1030,9 @@ function SpacesMod({spaces,setSpaces}){
 
 /* ═══ BOOKINGS ═══ */
 /* ═══ RESERVATIONS ═══ */
-function ReservationsMod({orders,setOrders,fleetBookings=[],emailTemplate,setEmailTemplate,emailLog=[],sendConfirmationEmail,renderEmailVars}){
+function ReservationsMod({orders,setOrders,fleetBookings=[],emailTemplate,setEmailTemplate,emailLog=[],sendConfirmationEmail,renderEmailVars,authUsers=[]}){
   const [sel,setSel]=useState(null);
+  const repName=e=>{if(!e)return"";const u=authUsers.find(x=>x.email===e);return u?u.name:e};
   const [filter,setFilter]=useState("all");
   const [view,setView]=useState("active"); /* "active" | "history" */
   const [showCfg,setShowCfg]=useState(false);
@@ -1131,7 +1144,7 @@ function ReservationsMod({orders,setOrders,fleetBookings=[],emailTemplate,setEma
           {filtered.length===0?<div className="text-center py-16 text-stone-400"><Calendar className="w-8 h-8 mx-auto mb-2"/><p>No reservations</p></div>
           :<DT headers={["Invoice","Client","Item","Dates","Deposit Paid","Status",""]} rows={filtered.map(o=>[
             <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded">{o.invNum||o.oid}</span>,
-            <div><div className="font-semibold text-sm">{o.un||"—"}</div><div className="text-[10px] text-stone-400">{o.ue}</div></div>,
+            <div><div className="font-semibold text-sm">{o.un||"—"}</div><div className="text-[10px] text-stone-400">{o.ue}</div>{o.salesRep&&<div className="text-[10px] mt-0.5 inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 font-semibold px-1.5 py-0.5 rounded">🧑‍💼 {repName(o.salesRep)}</div>}</div>,
             <div><div className="text-sm font-medium">{o.un2||o.un||"Vehicle"}</div><div className="text-[10px] text-stone-400">{o.ut||""}</div></div>,
             <span className="text-xs">{o.sd?new Date(o.sd).toLocaleDateString("en-US",{month:"short",day:"numeric"}):"—"} → {o.ed?new Date(o.ed).toLocaleDateString("en-US",{month:"short",day:"numeric"}):"—"}</span>,
             <span className="font-semibold text-emerald-700">{$f(o.reservationPaid||o.dp||0)}</span>,
@@ -1150,6 +1163,7 @@ function ReservationsMod({orders,setOrders,fleetBookings=[],emailTemplate,setEma
             <div className="grid grid-cols-2 gap-3">
               {[["Client",sel.un||"—"],["Email",sel.ue||"—"],["Vehicle",sel.un2||sel.un||"—"],["Type",sel.ut||"—"]].map(([l,v])=><div key={l} className="bg-stone-50 rounded-lg p-3"><div className="text-[10px] text-stone-400 uppercase font-semibold">{l}</div><div className="font-medium mt-0.5 text-sm">{v}</div></div>)}
             </div>
+            {sel.salesRep&&<div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-800"><div className="font-semibold uppercase mb-0.5 flex items-center gap-1.5">🧑‍💼 Booked by sales rep</div><p><strong>{repName(sel.salesRep)}</strong> scheduled this reservation on behalf of the customer.</p></div>}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-stone-50 rounded-lg p-3"><div className="text-[10px] text-stone-400 uppercase font-semibold">Days</div><div className="font-bold mt-0.5">{sel.days||0}</div></div>
               <div className="bg-stone-50 rounded-lg p-3"><div className="text-[10px] text-stone-400 uppercase font-semibold">Qty</div><div className="font-bold mt-0.5">{sel.qty||1}</div></div>
@@ -1193,8 +1207,8 @@ function ReservationsMod({orders,setOrders,fleetBookings=[],emailTemplate,setEma
       const safePage=Math.min(hPage,totalPages);
       const paged=h.slice((safePage-1)*PER_PAGE,safePage*PER_PAGE);
       const exportCSV=()=>{
-        const rows=[["Invoice","Order ID","Date","Client","Email","Item","Plate","Start","End","Days","Total","Deposit","Status","Pay Method"]];
-        h.forEach(o=>rows.push([o.invNum||"",o.oid||"",o.od||"",o.un||"",o.ue||"",o.un2||o.un||"",o.plate||"",typeof o.sd==="string"?o.sd:o.sd?.toISOString().split("T")[0]||"",typeof o.ed==="string"?o.ed:o.ed?.toISOString().split("T")[0]||"",o.days||"",o.tp||"",o.reservationPaid||o.dp||"",o.status||"",o.payMethod||""]));
+        const rows=[["Invoice","Order ID","Date","Client","Email","Item","Plate","Start","End","Days","Total","Deposit","Status","Pay Method","Sales Rep"]];
+        h.forEach(o=>rows.push([o.invNum||"",o.oid||"",o.od||"",o.un||"",o.ue||"",o.un2||o.un||"",o.plate||"",typeof o.sd==="string"?o.sd:o.sd?.toISOString().split("T")[0]||"",typeof o.ed==="string"?o.ed:o.ed?.toISOString().split("T")[0]||"",o.days||"",o.tp||"",o.reservationPaid||o.dp||"",o.status||"",o.payMethod||"",o.salesRep?repName(o.salesRep):""]));
         const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
         const blob=new Blob([csv],{type:"text/csv"});const url=URL.createObjectURL(blob);
         const a=document.createElement("a");a.href=url;a.download=`reservations-history-${new Date().toISOString().split("T")[0]}.csv`;a.click();URL.revokeObjectURL(url);
@@ -2595,7 +2609,6 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
 
       {/* GATEWAYS */}
       <SC title="Connected Services / Payment Gateways">
-        <div className="text-xs text-stone-500 bg-stone-50 border border-stone-200 rounded-lg p-3 mb-4">🔒 Secret &amp; webhook keys are stored on the server, never in the browser. The frontend is pre-wired to Stripe Checkout (<code className="bg-white px-1 rounded">startStripeCheckout</code>); flip <code className="bg-white px-1 rounded">STRIPE_LIVE</code> once the backend host is connected. See <code className="bg-white px-1 rounded">docs/stripe-integration.md</code>.</div>
         <div className="space-y-4">
           {/* STRIPE */}
           <div className="border border-stone-200 rounded-xl p-4"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">S</div><div><div className="text-sm font-semibold">Stripe</div><div className="text-xs text-stone-500">Credit card payments</div></div></div><div className="flex items-center gap-2"><Pill tone={gw.stripe.connected?"emerald":"red"}>{gw.stripe.connected?"Connected":"Not connected"}</Pill><button onClick={()=>setGwEdit(gwEdit==="stripe"?null:"stripe")} className="text-xs text-blue-700 font-medium px-3 py-1 hover:bg-blue-50 rounded-lg">Manage</button></div></div>
@@ -3546,6 +3559,7 @@ function SalesPanel({user,sv,logout,t,contacts=[],setContacts,fleet=[],orders=[]
 /* ═══ ADMIN · SALES COMMISSIONS ═══ */
 function CommissionsMod({orders=[],users=[],commissionPolicy,setCommissionPolicy,setOrders}){
   const [from,setFrom]=useState("");const [to,setTo]=useState("");
+  const [openRep,setOpenRep]=useState(null);
   const nameFor=(email)=>users.find(u=>u.email===email)?.name||email;
   const withRep=orders.filter(o=>o.salesRep&&o.status!=="Cancelled");
   const reps=[...new Set(withRep.map(o=>o.salesRep))];
@@ -3594,7 +3608,7 @@ function CommissionsMod({orders=[],users=[],commissionPolicy,setCommissionPolicy
     <SC title={`Sales team (${rows.length})`} padded={false}>
       {rows.length===0?<div className="text-center py-14 text-stone-400 text-sm">No sales-attributed reservations yet.</div>
       :<DT headers={["Salesperson","Sales (validated)","Awaiting validation","Accrued","Paid","Pending","In range",""]} rows={rows.map(r=>[
-        <div><div className="font-semibold text-sm">{r.name}</div><div className="text-[10px] text-stone-400">{r.email} · {r.total} total</div></div>,
+        <button onClick={()=>setOpenRep(openRep===r.email?null:r.email)} className="text-left group"><div className="font-semibold text-sm text-blue-800 group-hover:underline inline-flex items-center gap-1">{openRep===r.email?"▾":"▸"} {r.name}</div><div className="text-[10px] text-stone-400">{r.email} · {r.total} total · view history</div></button>,
         <Pill tone="blue">{r.earned}</Pill>,
         r.pendingCount>0?<div className="text-xs"><Pill tone="amber">{r.pendingCount}</Pill><div className="text-[10px] text-amber-700 mt-0.5">≈{$f(r.projected)} projected</div></div>:<span className="text-stone-300 text-xs">—</span>,
         <span className="font-semibold">{$f(r.accrued)}</span>,
@@ -3604,6 +3618,29 @@ function CommissionsMod({orders=[],users=[],commissionPolicy,setCommissionPolicy
         r.pending>0?<button onClick={()=>markRepPaid(r.email,true)} className="text-xs font-semibold text-blue-700 hover:underline">Mark paid</button>:<button onClick={()=>markRepPaid(r.email,false)} className="text-xs font-semibold text-stone-400 hover:underline">Reset</button>,
       ])}/>}
     </SC>
+    {/* PER-REP SALES HISTORY (drill-down) */}
+    {openRep&&(()=>{
+      const hist=withRep.filter(o=>o.salesRep===openRep).slice().sort((a,b)=>(b.approvedAt||b.od||"").localeCompare(a.approvedAt||a.od||""));
+      const rep=rows.find(r=>r.email===openRep);
+      const exportRepCSV=()=>{
+        const rr=[["Date","Order","Invoice","Customer","Item","Days","Total","Status","Commission","Commission status"]];
+        hist.forEach(o=>rr.push([(o.approvedAt||o.od||"").slice(0,10),o.oid||"",o.invNum||"",o.un||"",o.un2||o.un||"",o.days||"",o.tp||"",o.status||"",commissionAmount(o,commissionPolicy),o.status==="Pending"?"awaiting validation":o.commissionPaid?"paid":"earned unpaid"]));
+        const csv=rr.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+        const blob=new Blob([csv],{type:"text/csv"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`sales-history-${openRep.split("@")[0]}.csv`;a.click();URL.revokeObjectURL(url);
+      };
+      return <div className="mt-4"><SC title={`Sales history — ${rep?.name||openRep} (${hist.length})`} padded={false} action={<div className="flex items-center gap-2"><button onClick={exportRepCSV} className="text-xs font-semibold text-stone-600 border border-stone-200 rounded-lg px-2.5 py-1 hover:bg-stone-50">⬇ CSV</button><button onClick={()=>setOpenRep(null)} className="text-xs font-semibold text-stone-500 hover:underline">Close ✕</button></div>}>
+        {hist.length===0?<div className="text-center py-10 text-stone-400 text-sm">No reservations for this salesperson.</div>
+        :<DT headers={["Date","Order / Invoice","Customer","Item","Total","Status","Commission"]} rows={hist.map(o=>[
+          <span className="text-xs text-stone-600">{(o.approvedAt||o.od||"").slice(0,10)||"—"}</span>,
+          <div><div className="font-mono text-[11px] font-bold text-blue-700">{o.oid}</div><div className="text-[10px] text-stone-400">{o.invNum||"—"}</div></div>,
+          <div className="text-sm">{o.un||"—"}</div>,
+          <div className="text-xs text-stone-600">{o.un2||o.un||"—"}{o.days?` · ${o.days}d`:""}</div>,
+          <span className="font-semibold text-sm">{$f(o.tp||0)}</span>,
+          <Pill tone={o.status==="Pending"?"amber":o.status==="Cancelled"?"red":o.status==="Completed"?"stone":"blue"}>{o.status}</Pill>,
+          <div className="text-right"><div className={`font-bold text-sm ${isEarned(o)?"text-emerald-700":"text-stone-400"}`}>{$f(commissionAmount(o,commissionPolicy))}</div><div className="text-[10px]" style={{color:o.status==="Pending"?"#b45309":o.commissionPaid?"#047857":o.status==="Cancelled"?"#dc2626":"#2563eb"}}>{o.status==="Pending"?"awaiting validation":o.status==="Cancelled"?"—":o.commissionPaid?"paid":"earned · unpaid"}</div></div>,
+        ])}/>}
+      </SC></div>;
+    })()}
   </div>;
 }
 
@@ -3721,7 +3758,7 @@ export default function App(){
     return()=>{clearInterval(interval);if(ctx&&ctx.state!=="closed"){try{ctx.close()}catch(e){}}};
   },[alarmActive,alarmEnabled,view,user]);
   const [users,setUsers]=useState(USERS_INIT);
-  const [fleet,setFleet]=useState(()=>admSeedFleet.map(v=>({...v,id:v.id||v.plate,img:v.category==="Yard Spotter"?"🚛":v.category==="Daycab"?"🚚":v.category==="Flatbed"?"📦":v.category==="Forklift"?"🏗️":v.category==="Pickup"?"🛻":"🚐",cat:v.category,type:v.shortDesc||v.model,year:v.year,name:v.name,daily:v.daily,weekly:v.weekly,monthly:v.monthly,rateMile:v.mileDaily||0,depD:v.depositDaily||200,depW:v.depositWeekly||300,depM:v.depositMonthly||500,desc:v.shortDesc})));
+  const [fleet,setFleet]=useState(()=>admSeedFleet.map(v=>({...v,id:v.id||v.plate,img:catIcon(v.category),cat:v.category,type:v.shortDesc||v.model,year:v.year,name:v.name,daily:v.daily,weekly:v.weekly,monthly:v.monthly,rateMile:v.mileDaily||0,depD:v.depositDaily||200,depW:v.depositWeekly||300,depM:v.depositMonthly||500,desc:v.shortDesc})));
   const [spaces,setSpaces]=useState(admSeedSpaces);
   const [contacts,setContacts]=useState(admSeedContacts);
   const [cart,setCart]=useState([]);
@@ -3770,30 +3807,30 @@ export default function App(){
   const [orders,setOrders]=usePersistentState("btop_orders_v3",[
     /* Seed orders matching the 3 seed deliveries so Reservations and Headquarters show the same events */
     /* Demo CREDIT order (overdue) — relates to credit line CL-DEMO1 (Roberto Perez) to populate Credit & Overdue */
-    {oid:"ORD-CREDIT1",invNum:"INV-0096",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-04-01",approvedAt:"2026-04-01T00:00:00.000Z",un:"Roberto Perez",ue:"roberto@email.com",un2:"Ottawa Yard Spotter",uid:"v1",plate:"TX-990",ut:"Monthly yard spotter",sd:"2026-04-05",ed:"2026-05-05",days:30,qty:1,tp:3800,dp:500,reservationPaid:500,mr:0,miles:0,payMethod:"invoice",ui:"🚛",settlementPaid:false,settlementTotal:0},
-    {oid:"ORD-ABC123",invNum:"INV-0097",status:"Confirmed",phase:"reservation",od:"2026-04-05",un:"Carlos Mendez",ue:"carlos@email.com",un2:"Freightliner Cascadia",uid:"v2",plate:"TX-16000",ut:"Regional hauling daycab.",sd:"2026-04-10",ed:"2026-04-24",days:14,qty:1,tp:2310,dp:500,reservationPaid:500,mr:0.15,miles:0,payMethod:"Stripe",ui:"🚚",settlementPaid:false,settlementTotal:0},
+    {oid:"ORD-CREDIT1",invNum:"INV-0096",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-04-01",approvedAt:"2026-04-01T00:00:00.000Z",un:"Roberto Perez",ue:"roberto@email.com",un2:"Ottawa Yard Spotter",uid:"u990",plate:"990",ut:"Monthly yard spotter",sd:"2026-04-05",ed:"2026-05-05",days:30,qty:1,tp:3800,dp:500,reservationPaid:500,mr:0,miles:0,payMethod:"invoice",ui:"🚛",settlementPaid:false,settlementTotal:0},
+    {oid:"ORD-ABC123",invNum:"INV-0097",status:"Confirmed",phase:"reservation",od:"2026-04-05",un:"Carlos Mendez",ue:"carlos@email.com",un2:"Freightliner Cascadia",uid:"u16000",plate:"16000",ut:"Regional hauling daycab.",sd:"2026-04-10",ed:"2026-04-24",days:14,qty:1,tp:2310,dp:500,reservationPaid:500,mr:0.15,miles:0,payMethod:"Stripe",ui:"🚚",settlementPaid:false,settlementTotal:0},
     /* Sales-attributed demo orders (salesRep) to populate the Commissions module */
-    {oid:"ORD-SALE01",invNum:"INV-0090",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-05-12",approvedAt:"2026-05-12T00:00:00.000Z",un:"Mike Johnson",ue:"mike@email.com",un2:"Mitsubishi Forklift",uid:"v4",plate:"TX-1116",ut:"Forklift 5,000lb",sd:"2026-05-15",ed:"2026-05-20",days:5,qty:1,tp:1100,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"cash",ui:"🏗️",settlementPaid:false,settlementTotal:0,salesRep:"ventas@btop.com",bySales:true,commissionPaid:true},
-    {oid:"ORD-SALE02",invNum:"INV-0091",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-05-20",approvedAt:"2026-05-20T00:00:00.000Z",un:"Sarah Davis",ue:"sarah@email.com",un2:"Dodge Ram Pick Up",uid:"v5",plate:"TX-1317",ut:"Pickup 8ft bed",sd:"2026-05-22",ed:"2026-05-29",days:7,qty:1,tp:350,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"cash",ui:"🛻",settlementPaid:false,settlementTotal:0,salesRep:"ventas@btop.com",bySales:true},
-    {oid:"ORD-SALE03",invNum:"INV-0092",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-06-01",approvedAt:"2026-06-01T00:00:00.000Z",un:"ABC Transport",ue:"ops@abctransport.com",un2:"Wabash Van Trailer",uid:"v3",plate:"TX-821281",ut:"40ft trailer",sd:"2026-06-03",ed:"2026-06-17",days:14,qty:1,tp:850,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"cash",ui:"📦",settlementPaid:false,settlementTotal:0,salesRep:"carlos@btop.com",bySales:true},
-    {oid:"ORD-SALE04",invNum:"INV-0093",status:"Pending",payState:"awaiting_validation",phase:"reservation",od:"2026-06-25",expiresAt:"2026-07-25T00:00:00.000Z",un:"Maria Gonzalez",ue:"maria.g@email.com",un2:"GMC 3500 Box Truck",uid:"v6",plate:"TX-1212",ut:"16ft box truck",sd:"2026-06-28",ed:"2026-07-05",days:7,qty:1,tp:300,dp:150,reservationPaid:150,mr:0,miles:0,payMethod:"cash",ui:"🚐",settlementPaid:false,settlementTotal:0,salesRep:"carlos@btop.com",bySales:true},
-    {oid:"ORD-DEF456",invNum:"INV-0098",status:"Confirmed",phase:"reservation",od:"2026-04-08",un:"Laura Vega",ue:"laura@email.com",un2:"GMC 3500 Box Truck",uid:"v6",plate:"TX-1212",ut:"16ft box truck.",sd:"2026-04-12",ed:"2026-04-19",days:7,qty:1,tp:300,dp:150,reservationPaid:150,mr:0.15,miles:0,payMethod:"Zelle",ui:"🚐",settlementPaid:false,settlementTotal:0},
-    {oid:"ORD-OLD789",invNum:"INV-0099",status:"Active",phase:"reservation",od:"2026-03-28",un:"John Smith",ue:"john@email.com",un2:"Dodge Ram Pick Up",uid:"v5",plate:"TX-1317",ut:"Pickup 8ft bed.",sd:"2026-04-01",ed:"2026-04-08",days:7,qty:1,tp:350,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"Cash",ui:"🛻",settlementPaid:false,settlementTotal:0},
+    {oid:"ORD-SALE01",invNum:"INV-0090",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-05-12",approvedAt:"2026-05-12T00:00:00.000Z",un:"Mike Johnson",ue:"mike@email.com",un2:"Mitsubishi Forklift",uid:"u1116",plate:"1116",ut:"Forklift 5,000lb",sd:"2026-05-15",ed:"2026-05-20",days:5,qty:1,tp:1100,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"cash",ui:"🏗️",settlementPaid:false,settlementTotal:0,salesRep:"ventas@btop.com",bySales:true,commissionPaid:true},
+    {oid:"ORD-SALE02",invNum:"INV-0091",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-05-20",approvedAt:"2026-05-20T00:00:00.000Z",un:"Sarah Davis",ue:"sarah@email.com",un2:"Ram 1500 Tradesman",uid:"u1317",plate:"1317",ut:"Pickup 8ft bed",sd:"2026-05-22",ed:"2026-05-29",days:7,qty:1,tp:350,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"cash",ui:"🛻",settlementPaid:false,settlementTotal:0,salesRep:"ventas@btop.com",bySales:true},
+    {oid:"ORD-SALE03",invNum:"INV-0092",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-06-01",approvedAt:"2026-06-01T00:00:00.000Z",un:"ABC Transport",ue:"ops@abctransport.com",un2:"GMC 3500 Box Truck",uid:"u1212",plate:"1212",ut:"16ft box truck",sd:"2026-06-03",ed:"2026-06-17",days:14,qty:1,tp:850,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"cash",ui:"📦",settlementPaid:false,settlementTotal:0,salesRep:"carlos@btop.com",bySales:true},
+    {oid:"ORD-SALE04",invNum:"INV-0093",status:"Pending",payState:"awaiting_validation",phase:"reservation",od:"2026-06-25",expiresAt:"2026-07-25T00:00:00.000Z",un:"Maria Gonzalez",ue:"maria.g@email.com",un2:"GMC 3500 Box Truck",uid:"u1212",plate:"1212",ut:"16ft box truck",sd:"2026-06-28",ed:"2026-07-05",days:7,qty:1,tp:300,dp:150,reservationPaid:150,mr:0,miles:0,payMethod:"cash",ui:"📦",settlementPaid:false,settlementTotal:0,salesRep:"carlos@btop.com",bySales:true},
+    {oid:"ORD-DEF456",invNum:"INV-0098",status:"Confirmed",phase:"reservation",od:"2026-04-08",un:"Laura Vega",ue:"laura@email.com",un2:"GMC 3500 Box Truck",uid:"u1212",plate:"1212",ut:"16ft box truck.",sd:"2026-04-12",ed:"2026-04-19",days:7,qty:1,tp:300,dp:150,reservationPaid:150,mr:0.15,miles:0,payMethod:"Zelle",ui:"📦",settlementPaid:false,settlementTotal:0},
+    {oid:"ORD-OLD789",invNum:"INV-0099",status:"Active",phase:"reservation",od:"2026-03-28",un:"John Smith",ue:"john@email.com",un2:"Ram 1500 Tradesman",uid:"u1317",plate:"1317",ut:"Pickup 8ft bed.",sd:"2026-04-01",ed:"2026-04-08",days:7,qty:1,tp:350,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"Cash",ui:"🛻",settlementPaid:false,settlementTotal:0},
   ]);
   const [fleetBookings,setFleetBookings]=useState([
-    {vid:"v2",vname:"Freightliner Cascadia",start:"2026-04-10",end:"2026-04-24",type:"rental",client:"Carlos Mendez"},
-    {vid:"v6",vname:"GMC 3500 Box Truck",start:"2026-04-12",end:"2026-04-19",type:"rental",client:"Laura Vega"},
-    {vid:"v4",vname:"Mitsubishi Forklift",start:"2026-04-01",end:"2026-04-28",type:"maintenance",client:""},
-    {vid:"v5",vname:"Dodge Ram Pick Up",start:"2026-04-20",end:"2026-04-27",type:"rental",client:"John Smith"},
-    {vid:"v2",vname:"Freightliner Cascadia",start:"2026-04-28",end:"2026-05-10",type:"rental",client:"Roberto Perez"},
-    {vid:"v3",vname:"Wabash Van Trailer",start:"2026-04-15",end:"2026-04-22",type:"rental",client:"Mike Johnson"},
-    {vid:"v1",vname:"Ottawa Yard Spotter",start:"2026-05-01",end:"2026-05-14",type:"rental",client:"Gulf Coast Freight"},
-    {vid:"v6b",vname:"GMC 3500 Box Truck",start:"2026-04-25",end:"2026-05-02",type:"rental",client:"ABC Transport"},
+    {vid:"u16000",vname:"Freightliner Cascadia",start:"2026-04-10",end:"2026-04-24",type:"rental",client:"Carlos Mendez"},
+    {vid:"u1212",vname:"GMC 3500 Box Truck",start:"2026-04-12",end:"2026-04-19",type:"rental",client:"Laura Vega"},
+    {vid:"u1116",vname:"Mitsubishi Forklift",start:"2026-04-01",end:"2026-04-28",type:"maintenance",client:""},
+    {vid:"u1317",vname:"Ram 1500 Tradesman",start:"2026-04-20",end:"2026-04-27",type:"rental",client:"John Smith"},
+    {vid:"u16000",vname:"Freightliner Cascadia",start:"2026-04-28",end:"2026-05-10",type:"rental",client:"Roberto Perez"},
+    {vid:"u6049",vname:"Industrias Loading Ramp",start:"2026-04-15",end:"2026-04-22",type:"rental",client:"Mike Johnson"},
+    {vid:"u990",vname:"Ottawa Yard Spotter",start:"2026-05-01",end:"2026-05-14",type:"rental",client:"Gulf Coast Freight"},
+    {vid:"u1212",vname:"GMC 3500 Box Truck",start:"2026-04-25",end:"2026-05-02",type:"rental",client:"ABC Transport"},
   ]);
   const [deliveries,setDeliveries]=useState([
-    {id:"d1",oid:"ORD-ABC123",invNum:"INV-0097",client:"Carlos Mendez",vehicle:"Freightliner Cascadia",vid:"v2",plate:"TX-16000",start:"2026-04-10",end:"2026-04-24",status:"pending",milesOut:"",fuelOut:"",conditionOut:"",notesOut:"",milesIn:"",fuelIn:"",conditionIn:"",notesIn:"",damaged:false,damageDesc:"",deliveredBy:"",returnedBy:""},
-    {id:"d2",oid:"ORD-DEF456",invNum:"INV-0098",client:"Laura Vega",vehicle:"GMC 3500 Box Truck",vid:"v6",plate:"TX-1212",start:"2026-04-12",end:"2026-04-19",status:"pending",milesOut:"",fuelOut:"",conditionOut:"",notesOut:"",milesIn:"",fuelIn:"",conditionIn:"",notesIn:"",damaged:false,damageDesc:"",deliveredBy:"",returnedBy:""},
-    {id:"d3",oid:"ORD-OLD789",invNum:"INV-0099",client:"John Smith",vehicle:"Dodge Ram Pick Up",vid:"v5",plate:"TX-1317",start:"2026-04-01",end:"2026-04-08",status:"delivered",milesOut:"45230",fuelOut:"Full",conditionOut:"Good",notesOut:"No issues",deliveredBy:"Headquarters Agent",milesIn:"",fuelIn:"",conditionIn:"",notesIn:"",damaged:false,damageDesc:"",returnedBy:""},
+    {id:"d1",oid:"ORD-ABC123",invNum:"INV-0097",client:"Carlos Mendez",vehicle:"Freightliner Cascadia",vid:"u16000",plate:"16000",start:"2026-04-10",end:"2026-04-24",status:"pending",milesOut:"",fuelOut:"",conditionOut:"",notesOut:"",milesIn:"",fuelIn:"",conditionIn:"",notesIn:"",damaged:false,damageDesc:"",deliveredBy:"",returnedBy:""},
+    {id:"d2",oid:"ORD-DEF456",invNum:"INV-0098",client:"Laura Vega",vehicle:"GMC 3500 Box Truck",vid:"u1212",plate:"1212",start:"2026-04-12",end:"2026-04-19",status:"pending",milesOut:"",fuelOut:"",conditionOut:"",notesOut:"",milesIn:"",fuelIn:"",conditionIn:"",notesIn:"",damaged:false,damageDesc:"",deliveredBy:"",returnedBy:""},
+    {id:"d3",oid:"ORD-OLD789",invNum:"INV-0099",client:"John Smith",vehicle:"Ram 1500 Tradesman",vid:"u1317",plate:"1317",start:"2026-04-01",end:"2026-04-08",status:"delivered",milesOut:"45230",fuelOut:"Full",conditionOut:"Good",notesOut:"No issues",deliveredBy:"Headquarters Agent",milesIn:"",fuelIn:"",conditionIn:"",notesIn:"",damaged:false,damageDesc:"",returnedBy:""},
   ]);
   const [messages,setMessages]=useState([
     {id:"m1",name:"Roberto Perez",email:"roberto@email.com",phone:"(469) 555-0909",type:"Truck Rental Quote",msg:"I need a quote for a Freightliner Cascadia for 3 months starting May 1st.",date:"2026-04-15",read:false},
@@ -5241,7 +5278,7 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
   const setFleet=(updater)=>{
     setFleetLocal(prev=>{
       const next=typeof updater==="function"?updater(prev):updater;
-      if(appSetFleet)appSetFleet(next.map(v=>({...v,id:v.id,img:v.category==="Yard Spotter"?"🚛":v.category==="Daycab"?"🚚":v.category==="Flatbed"?"📦":v.category==="Forklift"?"🏗️":v.category==="Pickup"?"🛻":"🚐",cat:v.category,type:v.shortDesc||v.model,year:v.year,name:v.name,daily:v.daily,weekly:v.weekly,monthly:v.monthly,rateMile:v.mileDaily||0,depD:v.depositDaily||200,depW:v.depositWeekly||300,depM:v.depositMonthly||500,desc:v.shortDesc})));
+      if(appSetFleet)appSetFleet(next.map(v=>({...v,id:v.id,img:catIcon(v.category),cat:v.category,type:v.shortDesc||v.model,year:v.year,name:v.name,daily:v.daily,weekly:v.weekly,monthly:v.monthly,rateMile:v.mileDaily||0,depD:v.depositDaily||200,depW:v.depositWeekly||300,depM:v.depositMonthly||500,desc:v.shortDesc})));
       return next;
     });
   };
@@ -5346,7 +5383,7 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
           {section==="maintenance"&&<MaintenanceMod fleet={fleet} spaces={spaces} bookings={bookings} setBookings={setBookings} onViewUnit={(vid)=>{setSection("detfleet")}}/>}
           {section==="spaces"&&<SpacesMod spaces={spaces} setSpaces={setSpaces}/>}
           {section==="bookings"&&<BookingsMod/>}
-          {section==="reservations"&&<ReservationsMod orders={orders} setOrders={setOrders} fleetBookings={bookings} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars}/>}
+          {section==="reservations"&&<ReservationsMod orders={orders} setOrders={setOrders} fleetBookings={bookings} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars} authUsers={authUsers}/>}
           {section==="settlement"&&<SettlementMod orders={orders} setOrders={setOrders} deliveries={deliveries} fleet={fleet}/>}
           {section==="contacts"&&<ContactsMod contacts={contacts} setContacts={setContacts} orders={orders} clientDocsAll={clientDocsAll} depositReturnAll={depositReturnAll} sendMagicLink={sendMagicLink}/>}
           {section==="carts"&&<CartsMod carts={carts} setCarts={setCarts} contacts={contacts}/>}
