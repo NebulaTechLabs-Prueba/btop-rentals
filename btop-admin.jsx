@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, createContext, useContext } from "react";
 import { jsPDF } from "jspdf";
+import { usePersistentState, useRemoteState } from "./src/lib/persistence.js";
 import {
   Plus, Search, Pencil, Trash2, Eye, EyeOff, X as Xx, Check, MapPin, Star, Clock, Users,
   LayoutDashboard, CreditCard, UserCog, Settings, Bell, ChevronDown, ChevronRight,
@@ -2832,14 +2833,8 @@ function Cal({sd,ed,setSd,setEd,sel,setSel,blocked=[]}){
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* localStorage-backed React state. Falls back to in-memory on private mode. */
-function usePersistentState(key,initial){
-  const [v,setV]=useState(()=>{
-    try{const s=window.localStorage.getItem(key);if(s!=null)return JSON.parse(s);}catch(e){}
-    return typeof initial==="function"?initial():initial;
-  });
-  useEffect(()=>{try{window.localStorage.setItem(key,JSON.stringify(v))}catch(e){}},[key,v]);
-  return [v,setV];
-}
+/* usePersistentState / useRemoteState now live in src/lib/persistence.js (imported at top).
+   useRemoteState is the seam to swap localStorage → Supabase table-by-table (see MIGRATION-SUPABASE.md). */
 
 const PENDING_TTL_DAYS=30;          /* pending orders auto-expire after 30 days */
 const CART_STALE_MIN=60;            /* an active cart untouched >60 min = abandoned */
@@ -3765,7 +3760,7 @@ export default function App(){
   const [showCart,setShowCart]=useState(false);
   const [cartOpen,setCartOpen]=useState(false);
   /* Live carts registry + persistent stores (demo): swap for Supabase later */
-  const [carts,setCarts]=usePersistentState("btop_carts",[]);
+  const [carts,setCarts]=useRemoteState("carts",[],{localKey:"btop_carts"});/* Phase-1 reference: same behavior on localStorage until Supabase+Auth land */
   const [cartCode,setCartCode]=usePersistentState("btop_cartCode",null);
   const [contracts,setContracts]=usePersistentState("btop_contracts",[]);
   const [contractTpl,setContractTpl]=usePersistentState("btop_contractTpl",DEFAULT_CONTRACT_TPL);
