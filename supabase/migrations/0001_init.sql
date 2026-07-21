@@ -3,23 +3,7 @@
 -- Types stay close to the app's current shapes; nested/flexible data uses jsonb.
 
 -- ─────────────────────────────────────────────────────────────
--- Helpers: role of the current user (set in Phase 2 — Auth)
--- ─────────────────────────────────────────────────────────────
-create or replace function public.auth_role() returns text
-  language sql stable as $$ select coalesce((select role from public.profiles where id = auth.uid()), 'anon') $$;
-
-create or replace function public.is_staff() returns boolean
-  language sql stable as $$ select public.auth_role() in ('admin','sede','sales') $$;
-
-create or replace function public.is_admin() returns boolean
-  language sql stable as $$ select public.auth_role() = 'admin' $$;
-
--- updated_at trigger
-create or replace function public.touch_updated_at() returns trigger
-  language plpgsql as $$ begin new.updated_at = now(); return new; end $$;
-
--- ─────────────────────────────────────────────────────────────
--- Identity
+-- Identity (created first: the role helpers below reference it)
 -- ─────────────────────────────────────────────────────────────
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -29,6 +13,28 @@ create table public.profiles (
   role text not null default 'client' check (role in ('admin','sede','sales','client')),
   created_at timestamptz not null default now()
 );
+
+-- ─────────────────────────────────────────────────────────────
+-- Helpers: role of the current user (set in Phase 2 — Auth)
+-- ─────────────────────────────────────────────────────────────
+-- Role comes from the JWT app_metadata claim (set on users in Phase 2 — Auth):
+-- no table lookup, no RLS recursion, no SECURITY DEFINER exposure. search_path pinned.
+create or replace function public.auth_role() returns text
+  language sql stable set search_path = public
+  as $$ select coalesce(auth.jwt()->'app_metadata'->>'role', 'anon') $$;
+
+create or replace function public.is_staff() returns boolean
+  language sql stable set search_path = public
+  as $$ select public.auth_role() in ('admin','sede','sales') $$;
+
+create or replace function public.is_admin() returns boolean
+  language sql stable set search_path = public
+  as $$ select public.auth_role() = 'admin' $$;
+
+-- updated_at trigger
+create or replace function public.touch_updated_at() returns trigger
+  language plpgsql set search_path = public
+  as $$ begin new.updated_at = now(); return new; end $$;
 
 -- CRM contacts (may or may not have an account)
 create table public.contacts (
