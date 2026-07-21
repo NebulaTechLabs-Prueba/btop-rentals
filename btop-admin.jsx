@@ -3,6 +3,7 @@ import { jsPDF } from "jspdf";
 import { usePersistentState, useRemoteState } from "./src/lib/persistence.js";
 import { loadFleetUnits, loadSpaces } from "./src/lib/catalog.js";
 import { supabase, isSupabaseConfigured } from "./src/lib/supabase.js";
+import { useCollection, useSetting } from "./src/lib/collection.js";
 import {
   Plus, Search, Pencil, Trash2, Eye, EyeOff, X as Xx, Check, MapPin, Star, Clock, Users,
   LayoutDashboard, CreditCard, UserCog, Settings, Bell, ChevronDown, ChevronRight,
@@ -3761,19 +3762,19 @@ export default function App(){
   useEffect(()=>{let off=false;const n=(v,d)=>v==null?(d??0):Number(v);loadFleetUnits().then(rows=>{if(off||!rows)return;setFleet(rows.map(r=>{const s=r.specs||{};return{id:r.id,plate:r.plate,name:r.name,category:r.category,cat:r.category,year:r.year,make:r.make,model:r.model,status:r.status||"available",daily:n(r.daily),weekly:n(r.weekly),monthly:n(r.monthly),depD:n(r.deposit_daily,200),depW:n(r.deposit_weekly,300),depM:n(r.deposit_monthly,500),depositDaily:n(r.deposit_daily,200),depositWeekly:n(r.deposit_weekly,300),depositMonthly:n(r.deposit_monthly,500),rateMile:n(r.mile_daily),mileDaily:n(r.mile_daily),mileWeekly:n(r.mile_weekly),mileMonthly:n(r.mile_monthly),mileTiers:r.mile_tiers||[],fuelType:r.fuel_type,transmission:s.transmission||"",eqCapacity:s.eqCapacity||"",shortDesc:s.shortDesc||"",type:s.shortDesc||r.model,desc:s.shortDesc||"",img:catIcon(r.category)};}));}).catch(()=>{});return()=>{off=true};},[]);
   /* FLIP FASE 1 — hidrata los espacios de almacenamiento desde Supabase. Fail-safe: si falla, se queda el seed. */
   useEffect(()=>{let off=false;loadSpaces().then(rows=>{if(off||!rows)return;setSpaces(rows);}).catch(()=>{});return()=>{off=true};},[]);
-  const [contacts,setContacts]=useState(admSeedContacts);
+  const [contacts,setContacts]=useCollection("contacts",{pk:"id",authKey:user?.email,keyCols:c=>({name:c.name,email:c.email}),seed:admSeedContacts});
   const [cart,setCart]=useState([]);
   const [showCart,setShowCart]=useState(false);
   const [cartOpen,setCartOpen]=useState(false);
   /* Live carts registry + persistent stores (demo): swap for Supabase later */
   const [carts,setCarts]=useRemoteState("carts",[],{localKey:"btop_carts"});/* Phase-1 reference: same behavior on localStorage until Supabase+Auth land */
   const [cartCode,setCartCode]=usePersistentState("btop_cartCode",null);
-  const [contracts,setContracts]=usePersistentState("btop_contracts",[]);
-  const [contractTpl,setContractTpl]=usePersistentState("btop_contractTpl",DEFAULT_CONTRACT_TPL);
+  const [contracts,setContracts]=useCollection("contracts",{pk:"id",authKey:user?.email,seed:[]});
+  const [contractTpl,setContractTpl]=useSetting("contract_template",DEFAULT_CONTRACT_TPL);
   /* Admin-configurable contract sending strictness: "both" | "client" | "none" */
-  const [contractPolicy,setContractPolicy]=usePersistentState("btop_contractPolicy",{sendWhen:"both"});
+  const [contractPolicy,setContractPolicy]=useSetting("contract_policy",{sendWhen:"both"});
   /* Admin-configurable sales commission (general for all Sales): percentage or fixed, taken from company margin */
-  const [commissionPolicy,setCommissionPolicy]=usePersistentState("btop_commissionPolicy",{mode:"percentage",value:5});
+  const [commissionPolicy,setCommissionPolicy]=useSetting("commission_policy",{mode:"percentage",value:5});
   /* One-time account invites (magic link) */
   const [invites,setInvites]=usePersistentState("btop_invites",[]);
   const [magicLink,setMagicLink]=useState(null);
@@ -3781,7 +3782,7 @@ export default function App(){
   /* On load, honor a ?invite=TOKEN magic link */
   useEffect(()=>{try{const tk=new URLSearchParams(window.location.search).get("invite");if(tk){setInviteToken(tk);setView("invite")}}catch(e){}},[]);
   /* Company profile — single source of truth for contact details (editable in Settings) */
-  const [company,setCompany]=usePersistentState("btop_company",{name:"BTOP Rentals",address:"9807 Mines Rd #9, Laredo TX 78045",phone:"+1 469 690 712",email:"btoprentals@gmail.com",hours:"Mon–Fri 7AM–6PM · Sat 8AM–2PM"});
+  const [company,setCompany]=useSetting("company",{name:"BTOP Rentals",address:"9807 Mines Rd #9, Laredo TX 78045",phone:"+1 469 690 712",email:"btoprentals@gmail.com",hours:"Mon–Fri 7AM–6PM · Sat 8AM–2PM"});
   /* Saved payment methods per client email (shared so checkout can prefill from the client's dashboard) */
   const [savedPaysAll,setSavedPaysAll]=usePersistentState("btop_savedPays",{"cliente@test.com":[{id:1,type:"card",label:"Visa •••• 4242",nameOnCard:"Test Client",isDefault:true,status:"active"},{id:2,type:"cash",label:"Cash on Pickup",cashName:"Test Client",cashPhone:"(469) 555-0150",isDefault:false,status:"active"}]});
   const savedPays=user?(savedPaysAll[user.email]||[]):[];
@@ -3799,44 +3800,11 @@ export default function App(){
   const [depositReturnAll,setDepositReturnAll]=usePersistentState("btop_depositReturn",{});
   const depositReturnPref=user?(depositReturnAll[user.email]||{method:"bank",bankName:"",routingNumber:"",accountNumber:"",zelleEmail:""}):null;
   const setDepositReturnPref=(updater)=>{if(!user)return;setDepositReturnAll(prev=>{const cur=prev[user.email]||{method:"bank"};const next=typeof updater==="function"?updater(cur):updater;return{...prev,[user.email]:next}})};
-  const [creditLines,setCreditLines]=usePersistentState("btop_creditLines_v3",[
-    /* Seed credit lines tied to real demo clients (admSeedContacts) */
-    {id:"CL-TEST",clientName:"Test Client",email:"cliente@test.com",limit:10000,terms:30,grantedAt:"2026-05-10T00:00:00.000Z",active:true},
-    {id:"CL-DEMO1",clientName:"Roberto Perez",email:"roberto@email.com",limit:15000,terms:30,grantedAt:"2026-05-01T00:00:00.000Z",active:true},
-    {id:"CL-DEMO2",clientName:"ABC Transport",email:"ops@abctransport.com",limit:50000,terms:45,grantedAt:"2026-04-15T00:00:00.000Z",active:true},
-  ]);
-  const [orders,setOrders]=usePersistentState("btop_orders_v3",[
-    /* Seed orders matching the 3 seed deliveries so Reservations and Headquarters show the same events */
-    /* Demo CREDIT order (overdue) — relates to credit line CL-DEMO1 (Roberto Perez) to populate Credit & Overdue */
-    {oid:"ORD-CREDIT1",invNum:"INV-0096",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-04-01",approvedAt:"2026-04-01T00:00:00.000Z",un:"Roberto Perez",ue:"roberto@email.com",un2:"Ottawa Yard Spotter",uid:"u990",plate:"990",ut:"Monthly yard spotter",sd:"2026-04-05",ed:"2026-05-05",days:30,qty:1,tp:3800,dp:500,reservationPaid:500,mr:0,miles:0,payMethod:"invoice",ui:"🚛",settlementPaid:false,settlementTotal:0},
-    {oid:"ORD-ABC123",invNum:"INV-0097",status:"Confirmed",phase:"reservation",od:"2026-04-05",un:"Carlos Mendez",ue:"carlos@email.com",un2:"Freightliner Cascadia",uid:"u16000",plate:"16000",ut:"Regional hauling daycab.",sd:"2026-04-10",ed:"2026-04-24",days:14,qty:1,tp:2310,dp:500,reservationPaid:500,mr:0.15,miles:0,payMethod:"Stripe",ui:"🚚",settlementPaid:false,settlementTotal:0},
-    /* Sales-attributed demo orders (salesRep) to populate the Commissions module */
-    {oid:"ORD-SALE01",invNum:"INV-0090",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-05-12",approvedAt:"2026-05-12T00:00:00.000Z",un:"Mike Johnson",ue:"mike@email.com",un2:"Mitsubishi Forklift",uid:"u1116",plate:"1116",ut:"Forklift 5,000lb",sd:"2026-05-15",ed:"2026-05-20",days:5,qty:1,tp:1100,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"cash",ui:"🏗️",settlementPaid:false,settlementTotal:0,salesRep:"ventas@btop.com",bySales:true,commissionPaid:true},
-    {oid:"ORD-SALE02",invNum:"INV-0091",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-05-20",approvedAt:"2026-05-20T00:00:00.000Z",un:"Sarah Davis",ue:"sarah@email.com",un2:"Ram 1500 Tradesman",uid:"u1317",plate:"1317",ut:"Pickup 8ft bed",sd:"2026-05-22",ed:"2026-05-29",days:7,qty:1,tp:350,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"cash",ui:"🛻",settlementPaid:false,settlementTotal:0,salesRep:"ventas@btop.com",bySales:true},
-    {oid:"ORD-SALE03",invNum:"INV-0092",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-06-01",approvedAt:"2026-06-01T00:00:00.000Z",un:"ABC Transport",ue:"ops@abctransport.com",un2:"GMC 3500 Box Truck",uid:"u1212",plate:"1212",ut:"16ft box truck",sd:"2026-06-03",ed:"2026-06-17",days:14,qty:1,tp:850,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"cash",ui:"📦",settlementPaid:false,settlementTotal:0,salesRep:"ventas@btop.com",bySales:true},
-    {oid:"ORD-SALE04",invNum:"INV-0093",status:"Pending",payState:"awaiting_validation",phase:"reservation",od:"2026-06-25",expiresAt:"2026-07-25T00:00:00.000Z",un:"Maria Gonzalez",ue:"maria.g@email.com",un2:"GMC 3500 Box Truck",uid:"u1212",plate:"1212",ut:"16ft box truck",sd:"2026-06-28",ed:"2026-07-05",days:7,qty:1,tp:300,dp:150,reservationPaid:150,mr:0,miles:0,payMethod:"cash",ui:"📦",settlementPaid:false,settlementTotal:0,salesRep:"ventas@btop.com",bySales:true},
-    {oid:"ORD-DEF456",invNum:"INV-0098",status:"Confirmed",phase:"reservation",od:"2026-04-08",un:"Laura Vega",ue:"laura@email.com",un2:"GMC 3500 Box Truck",uid:"u1212",plate:"1212",ut:"16ft box truck.",sd:"2026-04-12",ed:"2026-04-19",days:7,qty:1,tp:300,dp:150,reservationPaid:150,mr:0.15,miles:0,payMethod:"Zelle",ui:"📦",settlementPaid:false,settlementTotal:0},
-    {oid:"ORD-OLD789",invNum:"INV-0099",status:"Active",phase:"reservation",od:"2026-03-28",un:"John Smith",ue:"john@email.com",un2:"Ram 1500 Tradesman",uid:"u1317",plate:"1317",ut:"Pickup 8ft bed.",sd:"2026-04-01",ed:"2026-04-08",days:7,qty:1,tp:350,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"Cash",ui:"🛻",settlementPaid:false,settlementTotal:0},
-  ]);
-  const [fleetBookings,setFleetBookings]=useState([
-    {vid:"u16000",vname:"Freightliner Cascadia",start:"2026-04-10",end:"2026-04-24",type:"rental",client:"Carlos Mendez"},
-    {vid:"u1212",vname:"GMC 3500 Box Truck",start:"2026-04-12",end:"2026-04-19",type:"rental",client:"Laura Vega"},
-    {vid:"u1116",vname:"Mitsubishi Forklift",start:"2026-04-01",end:"2026-04-28",type:"maintenance",client:""},
-    {vid:"u1317",vname:"Ram 1500 Tradesman",start:"2026-04-20",end:"2026-04-27",type:"rental",client:"John Smith"},
-    {vid:"u16000",vname:"Freightliner Cascadia",start:"2026-04-28",end:"2026-05-10",type:"rental",client:"Roberto Perez"},
-    {vid:"u6049",vname:"Industrias Loading Ramp",start:"2026-04-15",end:"2026-04-22",type:"rental",client:"Mike Johnson"},
-    {vid:"u990",vname:"Ottawa Yard Spotter",start:"2026-05-01",end:"2026-05-14",type:"rental",client:"Gulf Coast Freight"},
-    {vid:"u1212",vname:"GMC 3500 Box Truck",start:"2026-04-25",end:"2026-05-02",type:"rental",client:"ABC Transport"},
-  ]);
-  const [deliveries,setDeliveries]=useState([
-    {id:"d1",oid:"ORD-ABC123",invNum:"INV-0097",client:"Carlos Mendez",vehicle:"Freightliner Cascadia",vid:"u16000",plate:"16000",start:"2026-04-10",end:"2026-04-24",status:"pending",milesOut:"",fuelOut:"",conditionOut:"",notesOut:"",milesIn:"",fuelIn:"",conditionIn:"",notesIn:"",damaged:false,damageDesc:"",deliveredBy:"",returnedBy:""},
-    {id:"d2",oid:"ORD-DEF456",invNum:"INV-0098",client:"Laura Vega",vehicle:"GMC 3500 Box Truck",vid:"u1212",plate:"1212",start:"2026-04-12",end:"2026-04-19",status:"pending",milesOut:"",fuelOut:"",conditionOut:"",notesOut:"",milesIn:"",fuelIn:"",conditionIn:"",notesIn:"",damaged:false,damageDesc:"",deliveredBy:"",returnedBy:""},
-    {id:"d3",oid:"ORD-OLD789",invNum:"INV-0099",client:"John Smith",vehicle:"Ram 1500 Tradesman",vid:"u1317",plate:"1317",start:"2026-04-01",end:"2026-04-08",status:"delivered",milesOut:"45230",fuelOut:"Full",conditionOut:"Good",notesOut:"No issues",deliveredBy:"Headquarters Agent",milesIn:"",fuelIn:"",conditionIn:"",notesIn:"",damaged:false,damageDesc:"",returnedBy:""},
-  ]);
-  const [messages,setMessages]=useState([
-    {id:"m1",name:"Roberto Perez",email:"roberto@email.com",phone:"(469) 555-0909",type:"Truck Rental Quote",msg:"I need a quote for a Freightliner Cascadia for 3 months starting May 1st.",date:"2026-04-15",read:false},
-    {id:"m2",name:"Sarah Davis",email:"sarah@email.com",phone:"(469) 555-0808",type:"Storage Space",msg:"Do you have any 40ft outdoor spaces available? Looking for 6 months.",date:"2026-04-13",read:true},
-  ]);
+  const [creditLines,setCreditLines]=useCollection("credit_lines",{pk:"id",authKey:user?.email,keyCols:c=>({client_name:c.clientName,email:c.email}),seed:[]});
+  const [orders,setOrders]=useCollection("orders",{pk:"oid",authKey:user?.email,keyCols:o=>({customer_email:o.ue,status:o.status,sales_rep:o.salesRep,gid:o.gid,inv_num:o.invNum}),seed:[]});
+  const [fleetBookings,setFleetBookings]=useState([]);
+  const [deliveries,setDeliveries]=useCollection("deliveries",{pk:"id",authKey:user?.email,seed:[]});
+  const [messages,setMessages]=useCollection("messages",{pk:"id",authKey:user?.email,keyCols:m=>({from_name:m.name,from_email:m.email}),seed:[]});
   const addMessage=(m)=>setMessages(p=>[{...m,id:"m"+Date.now(),date:new Date().toISOString().split("T")[0],read:false},...p]);
   const [toast,setToast]=useState(null);
 
@@ -4930,7 +4898,6 @@ function Ct({cart,rm,co,total,sv,user,dl,dr}){
           <div className="ig"><label>Password</label><input className="inf" type="password" value={pw} onChange={e=>spw(e.target.value)} placeholder="••••••••" onKeyDown={e=>e.key==="Enter"&&tryL()}/></div>
           <button onClick={tryL} className="btn bp" style={{width:"100%",justifyContent:"center"}}>Sign In & Checkout</button>
           <div style={{textAlign:"center"}}><button onClick={()=>sv("forgot")} style={{background:"none",border:"none",color:"var(--b6)",cursor:"pointer",fontWeight:600,fontSize:13}}>Forgot Password?</button></div>
-          <div style={{padding:10,background:"var(--b0)",borderRadius:8,fontSize:12,color:"var(--b8)",textAlign:"center"}}>Acceso: usa tu correo como contraseña · cliente@test.com / cliente@test.com</div>
         </div>:<div style={{maxWidth:380,margin:"0 auto",display:"flex",flexDirection:"column",gap:12}}>
           <div className="ig"><label>Name</label><input className="inf" value={nm} onChange={e=>snm(e.target.value)} placeholder="John Doe"/></div>
           <div className="ig"><label>Email</label><input className="inf" type="email" value={em} onChange={e=>sem(e.target.value)} placeholder="you@email.com"/></div>
@@ -5234,17 +5201,6 @@ function Lo({dl,sv}){const [em,sem]=useState("");const [pw,spw]=useState("");con
         <button onClick={go} className="btn bp blg" style={{width:"100%",justifyContent:"center"}}>Sign In</button>
       </div>
       <div style={{textAlign:"center",marginTop:24,fontSize:14,color:"var(--g5)"}}>No account? <button onClick={()=>sv("register")} style={{background:"none",border:"none",color:"var(--b6)",cursor:"pointer",fontWeight:600}}>Create one</button></div>
-      <div style={{marginTop:20}}>
-        <p style={{fontSize:11,color:"var(--g5)",textAlign:"center",marginBottom:8,textTransform:"uppercase",letterSpacing:".5px",fontWeight:600}}>Accesos demo — toca para rellenar</p>
-        <div style={{display:"flex",gap:8}}>
-          {[["Admin","admin@btop.com","admin@btop.com"],["Cliente","cliente@test.com","cliente@test.com"],["Sede","sede@btop.com","sede@btop.com"],["Ventas","ventas@btop.com","ventas@btop.com"]].map(([l,e,p])=>
-            <button key={l} type="button" onClick={()=>{sem(e);spw(p)}} style={{flex:"1 1 0",minWidth:0,padding:"10px 8px",background:"var(--b0)",border:"1px solid var(--b1)",borderRadius:10,cursor:"pointer",textAlign:"center",transition:"all .15s"}} onMouseEnter={ev=>{ev.currentTarget.style.borderColor="var(--b5)";ev.currentTarget.style.background="#fff"}} onMouseLeave={ev=>{ev.currentTarget.style.borderColor="var(--b1)";ev.currentTarget.style.background="var(--b0)"}}>
-              <div style={{fontWeight:700,fontSize:13,color:"var(--b7)"}}>{l}</div>
-              <div style={{fontSize:10,color:"var(--g5)",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e}</div>
-            </button>
-          )}
-        </div>
-      </div>
     </div>
   </div>;
 }
