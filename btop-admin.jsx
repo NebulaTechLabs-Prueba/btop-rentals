@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, createContext, useContext } from "react";
 import { jsPDF } from "jspdf";
 import { usePersistentState, useRemoteState } from "./src/lib/persistence.js";
 import { loadFleetUnits, loadSpaces } from "./src/lib/catalog.js";
+import { supabase, isSupabaseConfigured } from "./src/lib/supabase.js";
 import {
   Plus, Search, Pencil, Trash2, Eye, EyeOff, X as Xx, Check, MapPin, Star, Clock, Users,
   LayoutDashboard, CreditCard, UserCog, Settings, Bell, ChevronDown, ChevronRight,
@@ -21,11 +22,10 @@ const FLEET = [
   { id:"0410", name:"Nilfisk Liberty SC60 Scrubber", year:2022, type:"Ride-On Floor Scrubber", cat:"Floor Scrubber", daily:325, weekly:975, monthly:2900, rateMile:0, depD:150, depW:400, depM:1200, img:"🧽", desc:"24V ride-on electric floor scrubber." },
 ];
 const USERS_INIT = [
-  { email:"admin@btop.com", pw:"admin123", role:"admin", name:"Admin BTOP", phone:"+1 469 690 712" },
-  { email:"cliente@test.com", pw:"test123", role:"client", name:"Test Client", phone:"(469) 555-0150" },
-  { email:"sede@btop.com", pw:"sede123", role:"sede", name:"Headquarters Agent", phone:"(469) 555-0199" },
-  { email:"ventas@btop.com", pw:"ventas123", role:"sales", name:"Ana Torres", phone:"(469) 555-0300" },
-  { email:"carlos@btop.com", pw:"ventas123", role:"sales", name:"Carlos Lopez", phone:"(469) 555-0301" },
+  { email:"admin@btop.com", pw:"admin@btop.com", role:"admin", name:"Admin", phone:"+1 469 690 712" },
+  { email:"cliente@test.com", pw:"cliente@test.com", role:"client", name:"Cliente", phone:"(469) 555-0150" },
+  { email:"sede@btop.com", pw:"sede@btop.com", role:"sede", name:"Sede", phone:"(469) 555-0199" },
+  { email:"ventas@btop.com", pw:"ventas@btop.com", role:"sales", name:"Ventas", phone:"(469) 555-0300" },
 ];
 
 
@@ -107,7 +107,7 @@ const admSeedContacts=[
 const admSeedUsers=[
   {id:"u1",name:"Admin BTOP",email:"admin@btop.com",role:"Super Admin",status:"active",last:"2 min ago",initials:"AB"},
   {id:"u2",name:"Maria Garcia",email:"maria@btop.com",role:"Fleet Manager",status:"active",last:"15 min ago",initials:"MG"},
-  {id:"u3",name:"Carlos Lopez",email:"carlos@btop.com",role:"Sales Rep",status:"active",last:"1 hr ago",initials:"CL"},
+  {id:"u3",name:"Ventas",email:"ventas@btop.com",role:"Sales Rep",status:"active",last:"1 hr ago",initials:"VE"},
 ];
 const admSeedRoles=[
   {id:"r1",name:"Super Admin",scope:"Full access",users:1,perms:[3,3,3,3,3,3]},
@@ -3813,8 +3813,8 @@ export default function App(){
     /* Sales-attributed demo orders (salesRep) to populate the Commissions module */
     {oid:"ORD-SALE01",invNum:"INV-0090",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-05-12",approvedAt:"2026-05-12T00:00:00.000Z",un:"Mike Johnson",ue:"mike@email.com",un2:"Mitsubishi Forklift",uid:"u1116",plate:"1116",ut:"Forklift 5,000lb",sd:"2026-05-15",ed:"2026-05-20",days:5,qty:1,tp:1100,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"cash",ui:"🏗️",settlementPaid:false,settlementTotal:0,salesRep:"ventas@btop.com",bySales:true,commissionPaid:true},
     {oid:"ORD-SALE02",invNum:"INV-0091",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-05-20",approvedAt:"2026-05-20T00:00:00.000Z",un:"Sarah Davis",ue:"sarah@email.com",un2:"Ram 1500 Tradesman",uid:"u1317",plate:"1317",ut:"Pickup 8ft bed",sd:"2026-05-22",ed:"2026-05-29",days:7,qty:1,tp:350,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"cash",ui:"🛻",settlementPaid:false,settlementTotal:0,salesRep:"ventas@btop.com",bySales:true},
-    {oid:"ORD-SALE03",invNum:"INV-0092",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-06-01",approvedAt:"2026-06-01T00:00:00.000Z",un:"ABC Transport",ue:"ops@abctransport.com",un2:"GMC 3500 Box Truck",uid:"u1212",plate:"1212",ut:"16ft box truck",sd:"2026-06-03",ed:"2026-06-17",days:14,qty:1,tp:850,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"cash",ui:"📦",settlementPaid:false,settlementTotal:0,salesRep:"carlos@btop.com",bySales:true},
-    {oid:"ORD-SALE04",invNum:"INV-0093",status:"Pending",payState:"awaiting_validation",phase:"reservation",od:"2026-06-25",expiresAt:"2026-07-25T00:00:00.000Z",un:"Maria Gonzalez",ue:"maria.g@email.com",un2:"GMC 3500 Box Truck",uid:"u1212",plate:"1212",ut:"16ft box truck",sd:"2026-06-28",ed:"2026-07-05",days:7,qty:1,tp:300,dp:150,reservationPaid:150,mr:0,miles:0,payMethod:"cash",ui:"📦",settlementPaid:false,settlementTotal:0,salesRep:"carlos@btop.com",bySales:true},
+    {oid:"ORD-SALE03",invNum:"INV-0092",status:"Confirmed",payState:"approved",phase:"reservation",od:"2026-06-01",approvedAt:"2026-06-01T00:00:00.000Z",un:"ABC Transport",ue:"ops@abctransport.com",un2:"GMC 3500 Box Truck",uid:"u1212",plate:"1212",ut:"16ft box truck",sd:"2026-06-03",ed:"2026-06-17",days:14,qty:1,tp:850,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"cash",ui:"📦",settlementPaid:false,settlementTotal:0,salesRep:"ventas@btop.com",bySales:true},
+    {oid:"ORD-SALE04",invNum:"INV-0093",status:"Pending",payState:"awaiting_validation",phase:"reservation",od:"2026-06-25",expiresAt:"2026-07-25T00:00:00.000Z",un:"Maria Gonzalez",ue:"maria.g@email.com",un2:"GMC 3500 Box Truck",uid:"u1212",plate:"1212",ut:"16ft box truck",sd:"2026-06-28",ed:"2026-07-05",days:7,qty:1,tp:300,dp:150,reservationPaid:150,mr:0,miles:0,payMethod:"cash",ui:"📦",settlementPaid:false,settlementTotal:0,salesRep:"ventas@btop.com",bySales:true},
     {oid:"ORD-DEF456",invNum:"INV-0098",status:"Confirmed",phase:"reservation",od:"2026-04-08",un:"Laura Vega",ue:"laura@email.com",un2:"GMC 3500 Box Truck",uid:"u1212",plate:"1212",ut:"16ft box truck.",sd:"2026-04-12",ed:"2026-04-19",days:7,qty:1,tp:300,dp:150,reservationPaid:150,mr:0.15,miles:0,payMethod:"Zelle",ui:"📦",settlementPaid:false,settlementTotal:0},
     {oid:"ORD-OLD789",invNum:"INV-0099",status:"Active",phase:"reservation",od:"2026-03-28",un:"John Smith",ue:"john@email.com",un2:"Ram 1500 Tradesman",uid:"u1317",plate:"1317",ut:"Pickup 8ft bed.",sd:"2026-04-01",ed:"2026-04-08",days:7,qty:1,tp:350,dp:300,reservationPaid:300,mr:0,miles:0,payMethod:"Cash",ui:"🛻",settlementPaid:false,settlementTotal:0},
   ]);
@@ -4089,27 +4089,49 @@ export default function App(){
     t(password?"Account updated — password changed":"Account updated","success");
     return true;
   };
-  const doLogin=(email,pw)=>{
-    const f=users.find(u=>u.email===email&&u.pw===pw);
-    if(!f){t("Invalid credentials","error");return false}
-    /* Block login if the matching contact is disabled */
-    const contact=contacts.find(c=>c.email===email);
-    if(contact&&contact.disabled){t("This account has been disabled. Please contact a BTOP advisor to reactivate it.","error");return false}
+  /* Applies a signed-in user object to state + routes staff to their panel. Shared by Supabase + fallback. */
+  const applyLogin=(f,{welcome=true}={})=>{
     setUser(f);
-    /* Staff (non-client) go straight to their panel with a welcome toast — avoids booking from the public side by mistake */
     if(f.role!=="client"){
       const dest=f.role==="admin"?"admin":f.role==="sede"?"hqfield":f.role==="sales"?"sales":"home";
       setView(dest);
-      const roleLbl=f.role==="admin"?"Admin":f.role==="sede"?"Headquarters":f.role==="sales"?"Sales":"";
-      t(`Welcome back, ${f.name.split(" ")[0]} — ${roleLbl} panel`,"success");
+      if(welcome){const roleLbl=f.role==="admin"?"Admin":f.role==="sede"?"Headquarters":f.role==="sales"?"Sales":"";t(`Welcome back, ${(f.name||f.email).split(" ")[0]} — ${roleLbl} panel`,"success");}
     }
     return f;
   };
-  const doReg=(name,email,pw,phone="")=>{if(users.find(u=>u.email===email)){t("Email exists","error");return false}const nu={email,pw,role:"client",name,phone};setUsers(p=>[...p,nu]);setUser(nu);
-    /* Mirror new client into the contacts directory so admin sees them (with phone/email for contact) */
+  /* Builds our user object from a Supabase auth user (role from app_metadata, name from user_metadata). */
+  const userFromSupabase=(su)=>({email:su.email,role:su.app_metadata?.role||"client",name:su.user_metadata?.name||su.email.split("@")[0],phone:su.user_metadata?.phone||""});
+  const doLogin=async(email,pw)=>{
+    /* Block login if the matching contact is disabled */
+    const contact=contacts.find(c=>c.email===email);
+    if(contact&&contact.disabled){t("This account has been disabled. Please contact a BTOP advisor to reactivate it.","error");return false}
+    if(isSupabaseConfigured&&supabase){
+      const {data,error}=await supabase.auth.signInWithPassword({email,password:pw});
+      if(error||!data?.user){t("Invalid credentials","error");return false}
+      return applyLogin(userFromSupabase(data.user));
+    }
+    /* Fallback: localStorage/USERS_INIT (dev sin Supabase) */
+    const f=users.find(u=>u.email===email&&u.pw===pw);
+    if(!f){t("Invalid credentials","error");return false}
+    return applyLogin(f);
+  };
+  const doReg=async(name,email,pw,phone="")=>{
+    if(isSupabaseConfigured&&supabase){
+      const {data,error}=await supabase.auth.signUp({email,password:pw,options:{data:{name,phone}}});
+      if(error){t(error.message||"Could not create account","error");return false}
+      if(setContacts)setContacts(p=>p.find(c=>c.email===email)?p:[...p,{id:"c"+Date.now(),name,email,phone,city:"",company:"",idDoc:"",registered:new Date().toISOString().split("T")[0],lastOrder:"",totalSpent:0,orders:0,hasAccount:true}]);
+      if(data?.session?.user){applyLogin(userFromSupabase(data.session.user),{welcome:false});t("Account created!","success");return true}
+      t("Account created — please check your email to confirm, then sign in.","success");return true;
+    }
+    /* Fallback */
+    if(users.find(u=>u.email===email)){t("Email exists","error");return false}
+    const nu={email,pw,role:"client",name,phone};setUsers(p=>[...p,nu]);setUser(nu);
     if(setContacts)setContacts(p=>p.find(c=>c.email===email)?p:[...p,{id:"c"+Date.now(),name,email,phone,city:"",company:"",idDoc:"",registered:new Date().toISOString().split("T")[0],lastOrder:"",totalSpent:0,orders:0}]);
-    t("Account created!");return true};
-  const logout=()=>{setUser(null);setView("home")};
+    t("Account created!");return true;
+  };
+  const logout=()=>{if(isSupabaseConfigured&&supabase)supabase.auth.signOut();setUser(null);setView("home")};
+  /* Restaura la sesión de Supabase al recargar (persistida en localStorage por el SDK) */
+  useEffect(()=>{if(!supabase)return;supabase.auth.getSession().then(({data})=>{const su=data?.session?.user;if(su)setUser(userFromSupabase(su))}).catch(()=>{})},[]);
 
   const css=`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Space+Mono:wght@400;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}:root{--navy:#0A1628;--b9:#0B2545;--b8:#13315C;--b7:#134074;--b6:#1B4DDB;--b5:#2563EB;--b4:#3B82F6;--b3:#60A5FA;--b2:#93C5FD;--b1:#DBEAFE;--b0:#EFF6FF;--g9:#111827;--g7:#374151;--g5:#6B7280;--g3:#D1D5DB;--g2:#E5E7EB;--g1:#F3F4F6;--g0:#F9FAFB;--w:#FFF;--green:#059669;--red:#DC2626;--orange:#F59E0B;--f:'DM Sans',sans-serif;--fm:'Space Mono',monospace;--sh:0 4px 16px rgba(11,37,69,.10);--r:12px;--rL:20px}
@@ -4872,8 +4894,8 @@ function Bk({fleet,ac,sv,t,bookings=[]}){const [u,su]=useState(null);const [s,ss
 /* ═══════ CART (inline auth) ═══════ */
 function Ct({cart,rm,co,total,sv,user,dl,dr}){
   const [am,sam]=useState("login");const [em,sem]=useState("");const [pw,spw]=useState("");const [nm,snm]=useState("");const [pw2,spw2]=useState("");
-  const tryL=()=>{if(dl(em,pw)){sem("");spw("")}};
-  const tryR=()=>{if(!nm||!em||!pw||pw!==pw2)return;if(dr(nm,em,pw)){snm("");sem("");spw("");spw2("")}};
+  const tryL=async()=>{const u=await dl(em,pw);if(u){sem("");spw("")}};
+  const tryR=async()=>{if(!nm||!em||!pw||pw!==pw2)return;if(await dr(nm,em,pw)){snm("");sem("");spw("");spw2("")}};
 
   if(!cart.length)return <div className="fi" style={{padding:"100px 24px",textAlign:"center"}}><X n="cart" s={64} c="var(--g3)"/><h2 style={{marginTop:24,color:"var(--navy)",fontWeight:700}}>Your cart is empty</h2><p style={{color:"var(--g5)",marginTop:8}}>Browse our fleet and add vehicles</p><button onClick={()=>sv("home")} className="btn bp" style={{marginTop:24}}><X n="truck" s={18}/>Browse Fleet</button></div>;
 
@@ -4908,7 +4930,7 @@ function Ct({cart,rm,co,total,sv,user,dl,dr}){
           <div className="ig"><label>Password</label><input className="inf" type="password" value={pw} onChange={e=>spw(e.target.value)} placeholder="••••••••" onKeyDown={e=>e.key==="Enter"&&tryL()}/></div>
           <button onClick={tryL} className="btn bp" style={{width:"100%",justifyContent:"center"}}>Sign In & Checkout</button>
           <div style={{textAlign:"center"}}><button onClick={()=>sv("forgot")} style={{background:"none",border:"none",color:"var(--b6)",cursor:"pointer",fontWeight:600,fontSize:13}}>Forgot Password?</button></div>
-          <div style={{padding:10,background:"var(--b0)",borderRadius:8,fontSize:12,color:"var(--b8)",textAlign:"center"}}><strong>Demo:</strong> admin@btop.com / admin123 · cliente@test.com / test123 · sede@btop.com / sede123</div>
+          <div style={{padding:10,background:"var(--b0)",borderRadius:8,fontSize:12,color:"var(--b8)",textAlign:"center"}}>Acceso: usa tu correo como contraseña · cliente@test.com / cliente@test.com</div>
         </div>:<div style={{maxWidth:380,margin:"0 auto",display:"flex",flexDirection:"column",gap:12}}>
           <div className="ig"><label>Name</label><input className="inf" value={nm} onChange={e=>snm(e.target.value)} placeholder="John Doe"/></div>
           <div className="ig"><label>Email</label><input className="inf" type="email" value={em} onChange={e=>sem(e.target.value)} placeholder="you@email.com"/></div>
@@ -5201,7 +5223,7 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},cred
   </div></div>;
 }
 
-function Lo({dl,sv}){const [em,sem]=useState("");const [pw,spw]=useState("");const [sh,ssh]=useState(false);const go=()=>{const u=dl(em,pw);if(u&&u.role==="client")sv("home")};
+function Lo({dl,sv}){const [em,sem]=useState("");const [pw,spw]=useState("");const [sh,ssh]=useState(false);const go=async()=>{const u=await dl(em,pw);if(u&&u.role==="client")sv("home")};
   return <div className="fi" style={{minHeight:"80vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"linear-gradient(135deg,var(--b0),var(--g0))"}}>
     <div className="cd" style={{maxWidth:440,width:"100%",padding:40}}>
       <div style={{textAlign:"center",marginBottom:32}}><div style={{width:60,height:60,borderRadius:16,background:"linear-gradient(135deg,var(--b6),var(--b4))",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><X n="lock" s={28} c="#fff"/></div><h2 style={{fontSize:24,fontWeight:800,color:"var(--navy)"}}>Welcome Back</h2></div>
@@ -5215,7 +5237,7 @@ function Lo({dl,sv}){const [em,sem]=useState("");const [pw,spw]=useState("");con
       <div style={{marginTop:20}}>
         <p style={{fontSize:11,color:"var(--g5)",textAlign:"center",marginBottom:8,textTransform:"uppercase",letterSpacing:".5px",fontWeight:600}}>Accesos demo — toca para rellenar</p>
         <div style={{display:"flex",gap:8}}>
-          {[["Admin","admin@btop.com","admin123"],["Client","cliente@test.com","test123"],["Branch","sede@btop.com","sede123"],["Sales","ventas@btop.com","ventas123"]].map(([l,e,p])=>
+          {[["Admin","admin@btop.com","admin@btop.com"],["Cliente","cliente@test.com","cliente@test.com"],["Sede","sede@btop.com","sede@btop.com"],["Ventas","ventas@btop.com","ventas@btop.com"]].map(([l,e,p])=>
             <button key={l} type="button" onClick={()=>{sem(e);spw(p)}} style={{flex:"1 1 0",minWidth:0,padding:"10px 8px",background:"var(--b0)",border:"1px solid var(--b1)",borderRadius:10,cursor:"pointer",textAlign:"center",transition:"all .15s"}} onMouseEnter={ev=>{ev.currentTarget.style.borderColor="var(--b5)";ev.currentTarget.style.background="#fff"}} onMouseLeave={ev=>{ev.currentTarget.style.borderColor="var(--b1)";ev.currentTarget.style.background="var(--b0)"}}>
               <div style={{fontWeight:700,fontSize:13,color:"var(--b7)"}}>{l}</div>
               <div style={{fontSize:10,color:"var(--g5)",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e}</div>
@@ -5227,13 +5249,13 @@ function Lo({dl,sv}){const [em,sem]=useState("");const [pw,spw]=useState("");con
   </div>;
 }
 function Re({dr,sv}){const [nm,snm]=useState("");const [em,sem]=useState("");const [ph,sph]=useState("");const [pw,spw]=useState("");const [pw2,spw2]=useState("");const [err,sErr]=useState("");const [depMethod,setDepMethod]=useState("bank");const [depInfo,setDepInfo]=useState("");
-  const go=()=>{
+  const go=async()=>{
     if(!nm.trim()){sErr("Full name is required");return}
     if(!em.trim()){sErr("Email is required");return}
     if(!ph.trim()){sErr("Phone number is required");return}
     if(pw.length<8){sErr("Password must be at least 8 characters");return}
     if(pw!==pw2){sErr("Passwords do not match");return}
-    sErr("");if(dr(nm,em,pw,ph))sv("home");
+    sErr("");if(await dr(nm,em,pw,ph))sv("home");
   };
   return <div className="fi" style={{minHeight:"80vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"linear-gradient(135deg,var(--b0),var(--g0))"}}>
     <div className="cd" style={{maxWidth:500,width:"100%",padding:40}}>
