@@ -2029,16 +2029,7 @@ function PayMod(){
 
 /* ═══ INVOICES CRM ═══ */
 function InvoiceMod(){
-  const [invoices,setInvoices]=useState([
-    {id:"INV-001",date:"2026-04-14",due:"2026-04-28",client:"Carlos Mendez",email:"carlos@email.com",phone:"(469) 555-0101",items:[{desc:"Freightliner Cascadia – 14 day rental",qty:1,rate:2450,kind:"product"},{desc:"Security Deposit – Freightliner Cascadia",qty:1,rate:500,kind:"deposit"}],tax:8.25,discount:0,status:"paid",notes:"Paid via Stripe",currency:"USD",source:"web"},
-    {id:"INV-002",date:"2026-04-12",due:"2026-04-26",client:"Laura Vega",email:"laura@email.com",phone:"(469) 555-0202",items:[{desc:"GMC 3500 Box Truck – 7 day rental",qty:1,rate:360,kind:"product"},{desc:"Security Deposit – GMC 3500 Box Truck",qty:1,rate:150,kind:"deposit"}],tax:8.25,discount:0,status:"sent",notes:"Net 14",currency:"USD",source:"manual"},
-    {id:"INV-003",date:"2026-04-10",due:"2026-04-24",client:"Martinez Logistics",email:"info@martinez.com",phone:"(469) 555-0303",items:[{desc:"Yard A North Lot – Monthly lease",qty:1,rate:1200,kind:"product"},{desc:"Security Deposit – Yard A North Lot",qty:1,rate:1200,kind:"deposit"}],tax:0,discount:0,status:"draft",notes:"Annual lease",currency:"USD",source:"manual"},
-    {id:"INV-004",date:"2026-04-08",due:"2026-04-22",client:"Gulf Coast Freight",email:"ops@gulfcoast.com",phone:"(469) 555-0404",items:[{desc:"Warehouse B1 – Monthly lease",qty:1,rate:2800,kind:"product"},{desc:"Security Deposit – Warehouse B1",qty:1,rate:1000,kind:"deposit"}],tax:0,discount:0,status:"completed",notes:"Auto-billed",currency:"USD",source:"web"},
-    {id:"INV-005",date:"2026-04-05",due:"2026-04-19",client:"John Smith",email:"john@email.com",phone:"(469) 555-0505",items:[{desc:"Dodge Ram Pick Up – 7 day rental",qty:1,rate:350,kind:"product"},{desc:"Security Deposit – Dodge Ram Pick Up",qty:1,rate:300,kind:"deposit"},{desc:"Cleaning fee",qty:1,rate:75,kind:"product"}],tax:8.25,discount:5,status:"completed",notes:"",currency:"USD",source:"web"},
-    {id:"INV-006",date:"2026-03-28",due:"2026-04-11",client:"Roberto Perez",email:"roberto@email.com",phone:"(469) 555-0909",items:[{desc:"Ottawa Yard Spotter – Monthly",qty:1,rate:3800,kind:"product"},{desc:"Security Deposit – Ottawa Yard Spotter",qty:1,rate:500,kind:"deposit"}],tax:8.25,discount:0,status:"completed",notes:"Recurring",currency:"USD",source:"web"},
-    {id:"INV-007",date:"2026-03-20",due:"2026-04-03",client:"ABC Transport",email:"ops@abc.com",phone:"(469) 555-1010",items:[{desc:"Cold Storage E – Monthly",qty:1,rate:3500,kind:"product"},{desc:"Security Deposit – Cold Storage E",qty:1,rate:1000,kind:"deposit"}],tax:0,discount:0,status:"completed",notes:"",currency:"USD",source:"web"},
-    {id:"INV-008",date:"2026-03-15",due:"2026-03-29",client:"Mike Johnson",email:"mike@email.com",phone:"(469) 555-0707",items:[{desc:"Forklift – 5 day rental",qty:1,rate:2250,kind:"product"},{desc:"Security Deposit – Forklift",qty:1,rate:300,kind:"deposit"}],tax:8.25,discount:0,status:"completed",notes:"",currency:"USD",source:"manual"},
-  ]);
+  const [invoices,setInvoices]=useCollection("invoices",{pk:"id",keyCols:i=>({email:i.email}),seed:[]});
   /* Global deposit-return policy (admin default). Each invoice may override via inv.depositReturn. */
   const [depositPolicy,setDepositPolicy]=useState({mode:"percentage",value:100});
   const [subNav,setSubNav]=useState("board"); // board | history | config
