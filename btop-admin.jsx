@@ -3,6 +3,7 @@ import { jsPDF } from "jspdf";
 import { usePersistentState, useRemoteState } from "./src/lib/persistence.js";
 import { loadFleetUnits, loadSpaces, loadProfiles } from "./src/lib/catalog.js";
 import { supabase, isSupabaseConfigured } from "./src/lib/supabase.js";
+import { sendEmail } from "./src/lib/email.js";
 import { useCollection, useSetting, useEmailMap } from "./src/lib/collection.js";
 import {
   Plus, Search, Pencil, Trash2, Eye, EyeOff, X as Xx, Check, MapPin, Star, Clock, Users,
@@ -1012,6 +1013,8 @@ function ReservationsMod({orders,setOrders,fleetBookings=[],emailTemplate,setEma
       const entry=sendConfirmationEmail({...o,status:"Confirmed"});
       if(entry)setEmailPreview(entry);
     }
+    /* Correo real (Resend) de reserva confirmada */
+    sendEmail("reservation-confirmed",o.ue,{client_name:o.un,order_number:o.invNum||o.oid,item:o.un2||o.un,start:typeof o.sd==="string"?o.sd:"",end:typeof o.ed==="string"?o.ed:"",total:$f((o.tp||0)+(o.dp||0))});
   };
   /* Check if this reservation's slot is still free (among bookings + other live orders) */
   const slotBusy=(o)=>{
@@ -3831,12 +3834,16 @@ export default function App(){
     const group=orders.filter(x=>(x.gid||x.oid)===gid).map(x=>({...x,status:"Confirmed",payState:"approved",approvedAt:at}));
     setOrders(p=>p.map(x=>(x.gid||x.oid)===gid?{...x,status:"Confirmed",payState:"approved",approvedAt:at,expiresAt:null}:x));
     if(sendConfirmationEmail)sendConfirmationEmail(group[0]);
+    /* Correo real (Resend) de pago validado */
+    const grpTotal=group.reduce((s,x)=>s+(x.reservationPaid||x.dp||0)+(x.tp||0),0);
+    sendEmail("payment-validated",o.ue,{client_name:o.un,order_number:o.oid,method:o.payMethod||"",amount:$f(grpTotal)});
     const c=sendContract(group);
     t(c?.sent?`Payment approved · agreement ${c.contractNum} emailed to ${o.ue}`:`Payment approved · agreement ${c?.contractNum||""} issued (awaiting signatures before sending)`,"success");
   };
   const rejectOrder=(oid)=>{
     const o=orders.find(x=>x.oid===oid);const gid=o?(o.gid||o.oid):oid;
     setOrders(p=>p.map(x=>(x.gid||x.oid)===gid?{...x,status:"Cancelled",payState:"rejected"}:x));
+    if(o)sendEmail("payment-rejected",o.ue,{client_name:o.un,order_number:o.oid,resubmit_url:`https://btop-rentals.com/`});
     t("Payment rejected. Order cancelled.","error");
   };
   /* A Sales employee schedules a reservation for a contact → Pending order tagged with salesRep (commission accrues on admin validation) */
