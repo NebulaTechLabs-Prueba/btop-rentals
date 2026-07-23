@@ -9,10 +9,12 @@ contact block (kept in sync with the `company` setting in Supabase).
 
 ### 1) Supabase Auth (paste into Dashboard → Authentication → Email Templates)
 Use Supabase's `{{ .Variable }}` placeholders.
-- `confirm-signup.html`  → "Confirm signup"
-- `magic-link.html`      → "Magic Link"
-- `reset-password.html`  → "Reset Password"
-- `invite.html`          → "Invite user"
+- `confirm-signup.html`   → "Confirm sign up"
+- `invite.html`           → "Invite user"
+- `magic-link.html`       → "Magic link or OTP"
+- `change-email.html`     → "Change email address"
+- `reset-password.html`   → "Reset password"
+- `reauthentication.html` → "Reauthentication" (uses `{{ .Token }}` OTP code, not a link)
 
 Supabase vars available: `{{ .ConfirmationURL }}`, `{{ .Token }}`, `{{ .TokenHash }}`,
 `{{ .SiteURL }}`, `{{ .Email }}`, `{{ .RedirectTo }}`.
