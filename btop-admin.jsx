@@ -2583,46 +2583,36 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
         </div>
       </SC>
 
-      {/* STRIPE (Test/Live) */}
-      <SC title="Stripe Payments">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="max-w-xl">
-              <div className="text-sm font-semibold text-stone-800">Card payments via Stripe</div>
-              <p className="text-xs text-stone-500 mt-1">When ON, card checkout redirects to Stripe's secure hosted page and the order is confirmed by webhook. When OFF, card checkout runs in the built-in demo mode (no real charge).</p>
-            </div>
-            <button onClick={()=>setStripe({enabled:!stripeCfg.enabled})} className={`shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border ${stripeCfg.enabled?"bg-emerald-50 text-emerald-700 border-emerald-200":"bg-stone-100 text-stone-600 border-stone-200"}`}>
-              <span className={`w-9 h-5 rounded-full flex items-center px-0.5 ${stripeCfg.enabled?"bg-emerald-500":"bg-stone-300"}`}><span className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${stripeCfg.enabled?"translate-x-4":""}`}/></span>
-              {stripeCfg.enabled?"Stripe ON":"Stripe OFF"}
-            </button>
-          </div>
-          <div className="flex items-center gap-3 flex-wrap border-t border-stone-100 pt-4">
-            <span className="text-sm font-medium text-stone-700">Environment</span>
-            <div className="inline-flex bg-stone-100 rounded-full p-1">
-              {[["test","Test"],["live","Live"]].map(([v,l])=><button key={v} onClick={()=>setStripe({mode:v})} className={`px-4 py-1.5 rounded-full text-xs font-semibold ${stripeCfg.mode===v?(v==="live"?"bg-blue-900 text-white":"bg-amber-500 text-white"):"text-stone-600"}`}>{l}</button>)}
-            </div>
-            <span className={`text-xs font-semibold px-2 py-1 rounded ${stripeCfg.mode==="live"?"bg-blue-50 text-blue-700":"bg-amber-50 text-amber-700"}`}>{stripeCfg.mode==="live"?"LIVE — real charges":"TEST — no real charges"}</span>
-          </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <F label="Publishable key — Test (pk_test_…)"><Inp value={stripeCfg.pk_test} onChange={v=>setStripe({pk_test:v})} placeholder="pk_test_..."/></F>
-            <F label="Publishable key — Live (pk_live_…)"><Inp value={stripeCfg.pk_live} onChange={v=>setStripe({pk_live:v})} placeholder="pk_live_..."/></F>
-          </div>
-          <div className="text-xs text-stone-500 bg-stone-50 border border-stone-200 rounded-lg p-3">🔒 The <strong>secret</strong> and <strong>webhook</strong> keys are never stored here — set them once in Supabase as Edge Function secrets: <code className="bg-white px-1 rounded">STRIPE_SECRET_TEST</code>, <code className="bg-white px-1 rounded">STRIPE_SECRET_LIVE</code>, <code className="bg-white px-1 rounded">STRIPE_WEBHOOK_TEST</code>, <code className="bg-white px-1 rounded">STRIPE_WEBHOOK_LIVE</code>. Webhook URL: <code className="bg-white px-1 rounded">{`${import.meta.env.VITE_SUPABASE_URL||""}/functions/v1/stripe-webhook`}</code></div>
-        </div>
-      </SC>
-
       {/* GATEWAYS */}
       <SC title="Connected Services / Payment Gateways">
         <div className="space-y-4">
           {/* STRIPE */}
-          <div className="border border-stone-200 rounded-xl p-4"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">S</div><div><div className="text-sm font-semibold">Stripe</div><div className="text-xs text-stone-500">Credit card payments</div></div></div><div className="flex items-center gap-2"><Pill tone={gw.stripe.connected?"emerald":"red"}>{gw.stripe.connected?"Connected":"Not connected"}</Pill><button onClick={()=>setGwEdit(gwEdit==="stripe"?null:"stripe")} className="text-xs text-blue-700 font-medium px-3 py-1 hover:bg-blue-50 rounded-lg">Manage</button></div></div>
-            {gw.stripe.connected&&gw.stripe.mode==="test"&&<div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3 h-3"/>Running in TEST mode</div>}
-            {gwEdit==="stripe"&&<div className="mt-4 space-y-3 border-t border-stone-200 pt-4">
-              <F label="Publishable Key"><Inp value={gw.stripe.pubKey} onChange={v=>uGw("stripe","pubKey",v)} placeholder="pk_test_..."/></F>
-              <F label="Secret Key"><Inp value={gw.stripe.secretKey} onChange={v=>uGw("stripe","secretKey",v)} placeholder="sk_test_..." type="password"/></F>
-              <F label="Webhook Secret"><Inp value={gw.stripe.webhookSecret} onChange={v=>uGw("stripe","webhookSecret",v)} placeholder="whsec_..."/></F>
-              <F label="Mode"><Sel value={gw.stripe.mode} onChange={v=>uGw("stripe","mode",v)} options={[["test","Test"],["live","Live"]]}/></F>
-              <div className="flex gap-2"><button onClick={()=>{uGw("stripe","connected",true);setGwEdit(null)}} className="px-4 py-2 bg-blue-900 text-white rounded-full text-sm">Save & Connect</button>{gw.stripe.connected&&<button onClick={()=>uGw("stripe","connected",false)} className="px-4 py-2 text-red-600 border border-red-200 rounded-full text-sm">Disconnect</button>}</div>
+          <div className="border border-stone-200 rounded-xl p-4"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">S</div><div><div className="text-sm font-semibold">Stripe</div><div className="text-xs text-stone-500">Credit card payments (hosted checkout)</div></div></div><div className="flex items-center gap-2"><Pill tone={stripeCfg.enabled?"emerald":"stone"}>{stripeCfg.enabled?`On · ${stripeCfg.mode==="live"?"Live":"Test"}`:"Off"}</Pill><button onClick={()=>setGwEdit(gwEdit==="stripe"?null:"stripe")} className="text-xs text-blue-700 font-medium px-3 py-1 hover:bg-blue-50 rounded-lg">Manage</button></div></div>
+            {stripeCfg.enabled&&stripeCfg.mode==="test"&&<div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3 h-3"/>Running in TEST mode — no real charges</div>}
+            {gwEdit==="stripe"&&<div className="mt-4 space-y-4 border-t border-stone-200 pt-4">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="max-w-md">
+                  <div className="text-sm font-semibold text-stone-800">Card payments via Stripe</div>
+                  <p className="text-xs text-stone-500 mt-1">When ON, card checkout redirects to Stripe's secure hosted page and the order is confirmed by webhook. When OFF, card checkout runs in the built-in demo mode (no real charge).</p>
+                </div>
+                <button onClick={()=>setStripe({enabled:!stripeCfg.enabled})} className={`shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border ${stripeCfg.enabled?"bg-emerald-50 text-emerald-700 border-emerald-200":"bg-stone-100 text-stone-600 border-stone-200"}`}>
+                  <span className={`w-9 h-5 rounded-full flex items-center px-0.5 ${stripeCfg.enabled?"bg-emerald-500":"bg-stone-300"}`}><span className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${stripeCfg.enabled?"translate-x-4":""}`}/></span>
+                  {stripeCfg.enabled?"Stripe ON":"Stripe OFF"}
+                </button>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-sm font-medium text-stone-700">Environment</span>
+                <div className="inline-flex bg-stone-100 rounded-full p-1">
+                  {[["test","Test"],["live","Live"]].map(([v,l])=><button key={v} onClick={()=>setStripe({mode:v})} className={`px-4 py-1.5 rounded-full text-xs font-semibold ${stripeCfg.mode===v?(v==="live"?"bg-blue-900 text-white":"bg-amber-500 text-white"):"text-stone-600"}`}>{l}</button>)}
+                </div>
+                <span className={`text-xs font-semibold px-2 py-1 rounded ${stripeCfg.mode==="live"?"bg-blue-50 text-blue-700":"bg-amber-50 text-amber-700"}`}>{stripeCfg.mode==="live"?"LIVE — real charges":"TEST — no real charges"}</span>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <F label="Publishable key — Test (pk_test_…)"><Inp value={stripeCfg.pk_test} onChange={v=>setStripe({pk_test:v})} placeholder="pk_test_..."/></F>
+                <F label="Publishable key — Live (pk_live_…)"><Inp value={stripeCfg.pk_live} onChange={v=>setStripe({pk_live:v})} placeholder="pk_live_..."/></F>
+              </div>
+              <div className="text-xs text-stone-500 bg-stone-50 border border-stone-200 rounded-lg p-3">🔒 The <strong>secret</strong> and <strong>webhook</strong> keys are never stored here — set them once in Supabase as Edge Function secrets: <code className="bg-white px-1 rounded">STRIPE_SECRET_TEST</code>, <code className="bg-white px-1 rounded">STRIPE_SECRET_LIVE</code>, <code className="bg-white px-1 rounded">STRIPE_WEBHOOK_TEST</code>, <code className="bg-white px-1 rounded">STRIPE_WEBHOOK_LIVE</code>. Webhook URL: <code className="bg-white px-1 rounded">{`${import.meta.env.VITE_SUPABASE_URL||""}/functions/v1/stripe-webhook`}</code></div>
+              <div className="flex justify-end"><button onClick={()=>setGwEdit(null)} className="px-4 py-2 bg-blue-900 text-white rounded-full text-sm">Done</button></div>
             </div>}
           </div>
           {/* ZELLE */}
