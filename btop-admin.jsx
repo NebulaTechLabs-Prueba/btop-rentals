@@ -2497,6 +2497,7 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
   const [emailEnabled,setEmailEnabled]=useSetting("email_enabled",false);
   const [stripeCfg,setStripeCfg]=useSetting("stripe_public",{enabled:false,mode:"test",pk_test:"",pk_live:""});
   const setStripe=(patch)=>setStripeCfg({...stripeCfg,...patch});
+  const [showKeys,setShowKeys]=useState(false);
   const [gwEdit,setGwEdit]=useState(null);
   const [editHours,setEditHours]=useState(false);
   const [editCompany,setEditCompany]=useState(false);
@@ -2573,7 +2574,7 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
       <SC title="Email Notifications">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="max-w-xl">
-            <div className="text-sm font-semibold text-stone-800">Send transactional emails (Resend)</div>
+            <div className="text-sm font-semibold text-stone-800">Send transactional emails</div>
             <p className="text-xs text-stone-500 mt-1">When ON, the system emails clients on payment validated/rejected, reservation confirmed, contract sent and invoice sent. When OFF, nothing is emailed (events are still logged). Auth emails — signup / password reset — are handled separately by the login provider.</p>
           </div>
           <button onClick={()=>setEmailEnabled(!emailEnabled)} className={`shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border ${emailEnabled?"bg-emerald-50 text-emerald-700 border-emerald-200":"bg-stone-100 text-stone-600 border-stone-200"}`}>
@@ -2607,11 +2608,15 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
                 </div>
                 <span className={`text-xs font-semibold px-2 py-1 rounded ${stripeCfg.mode==="live"?"bg-blue-50 text-blue-700":"bg-amber-50 text-amber-700"}`}>{stripeCfg.mode==="live"?"LIVE — real charges":"TEST — no real charges"}</span>
               </div>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <F label="Publishable key — Test (pk_test_…)"><Inp value={stripeCfg.pk_test} onChange={v=>setStripe({pk_test:v})} placeholder="pk_test_..."/></F>
-                <F label="Publishable key — Live (pk_live_…)"><Inp value={stripeCfg.pk_live} onChange={v=>setStripe({pk_live:v})} placeholder="pk_live_..."/></F>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-stone-600">Publishable keys</span>
+                <button onClick={()=>setShowKeys(!showKeys)} className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-500 hover:text-stone-700">{showKeys?<EyeOff className="w-3.5 h-3.5"/>:<Eye className="w-3.5 h-3.5"/>}{showKeys?"Hide":"Show"}</button>
               </div>
-              <div className="text-xs text-stone-500 bg-stone-50 border border-stone-200 rounded-lg p-3">🔒 The <strong>secret</strong> and <strong>webhook</strong> keys are never stored here — set them once in Supabase as Edge Function secrets: <code className="bg-white px-1 rounded">STRIPE_SECRET_TEST</code>, <code className="bg-white px-1 rounded">STRIPE_SECRET_LIVE</code>, <code className="bg-white px-1 rounded">STRIPE_WEBHOOK_TEST</code>, <code className="bg-white px-1 rounded">STRIPE_WEBHOOK_LIVE</code>. Webhook URL: <code className="bg-white px-1 rounded">{`${import.meta.env.VITE_SUPABASE_URL||""}/functions/v1/stripe-webhook`}</code></div>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <F label="Test (pk_test_…)"><Inp value={stripeCfg.pk_test} onChange={v=>setStripe({pk_test:v})} placeholder="pk_test_..." type={showKeys?"text":"password"}/></F>
+                <F label="Live (pk_live_…)"><Inp value={stripeCfg.pk_live} onChange={v=>setStripe({pk_live:v})} placeholder="pk_live_..." type={showKeys?"text":"password"}/></F>
+              </div>
+              <div className="text-xs text-stone-500 bg-stone-50 border border-stone-200 rounded-lg p-3">🔒 The private keys are managed securely on the server and are never shown or stored in this panel.</div>
               <div className="flex justify-end"><button onClick={()=>setGwEdit(null)} className="px-4 py-2 bg-blue-900 text-white rounded-full text-sm">Done</button></div>
             </div>}
           </div>
