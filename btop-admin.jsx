@@ -2494,6 +2494,7 @@ function DashMod({nav,fleet,spaces,orders=[],bookings=[],creditLines=[],contacts
 
 /* ═══ SETTINGS ═══ */
 function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEnabled,company,setCompany}){
+  const [emailEnabled,setEmailEnabled]=useSetting("email_enabled",false);
   const [gwEdit,setGwEdit]=useState(null);
   const [editHours,setEditHours]=useState(false);
   const [editCompany,setEditCompany]=useState(false);
@@ -2564,6 +2565,20 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
             {h.active?<><input type="time" value={h.open} onChange={e=>{const n=[...hours];n[i]={...h,open:e.target.value};setHours(n)}} className="px-2 py-1 border border-stone-200 rounded text-sm"/><span className="text-stone-400">to</span><input type="time" value={h.close} onChange={e=>{const n=[...hours];n[i]={...h,close:e.target.value};setHours(n)}} className="px-2 py-1 border border-stone-200 rounded text-sm"/></>:<span className="text-sm text-stone-400">Closed</span>}
           </>:<><span className="text-sm text-stone-600 w-28">{h.day}</span><span className="text-sm font-medium">{h.active?`${h.open} – ${h.close}`:"Closed"}</span></>}
         </div>))}</div>
+      </SC>
+
+      {/* EMAIL NOTIFICATIONS (Resend kill switch) */}
+      <SC title="Email Notifications">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="max-w-xl">
+            <div className="text-sm font-semibold text-stone-800">Send transactional emails (Resend)</div>
+            <p className="text-xs text-stone-500 mt-1">When ON, the system emails clients on payment validated/rejected, reservation confirmed, contract sent and invoice sent. When OFF, nothing is emailed (events are still logged). Auth emails — signup / password reset — are handled separately by the login provider.</p>
+          </div>
+          <button onClick={()=>setEmailEnabled(!emailEnabled)} className={`shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border ${emailEnabled?"bg-emerald-50 text-emerald-700 border-emerald-200":"bg-stone-100 text-stone-600 border-stone-200"}`}>
+            <span className={`w-9 h-5 rounded-full flex items-center px-0.5 ${emailEnabled?"bg-emerald-500":"bg-stone-300"}`}><span className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${emailEnabled?"translate-x-4":""}`}/></span>
+            {emailEnabled?"Emails ON":"Emails OFF"}
+          </button>
+        </div>
       </SC>
 
       {/* GATEWAYS */}
