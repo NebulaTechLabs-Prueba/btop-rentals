@@ -2504,7 +2504,8 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
   const [secretFlash,setSecretFlash]=useState("");
   const saveSecret=async(field,key)=>{
     const val=(secretDraft[field]||"").trim(); if(!val||!supabase)return;
-    const {error}=await supabase.from("secure_settings").upsert({key,value:val,updated_at:new Date().toISOString()});
+    /* write-only via SECURITY DEFINER rpc: stores the secret without granting read access */
+    const {error}=await supabase.rpc("set_secret",{p_key:key,p_value:val});
     if(error){setSecretFlash("error:"+field);return;}
     setStripe({[field+"_set"]:true});
     setSecretDraft(d=>({...d,[field]:""}));
