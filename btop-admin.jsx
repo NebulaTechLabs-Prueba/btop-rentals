@@ -2495,6 +2495,8 @@ function DashMod({nav,fleet,spaces,orders=[],bookings=[],creditLines=[],contacts
 /* ═══ SETTINGS ═══ */
 function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEnabled,company,setCompany}){
   const [emailEnabled,setEmailEnabled]=useSetting("email_enabled",false);
+  const [stripeCfg,setStripeCfg]=useSetting("stripe_public",{enabled:false,mode:"test",pk_test:"",pk_live:""});
+  const setStripe=(patch)=>setStripeCfg({...stripeCfg,...patch});
   const [gwEdit,setGwEdit]=useState(null);
   const [editHours,setEditHours]=useState(false);
   const [editCompany,setEditCompany]=useState(false);
@@ -2578,6 +2580,34 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
             <span className={`w-9 h-5 rounded-full flex items-center px-0.5 ${emailEnabled?"bg-emerald-500":"bg-stone-300"}`}><span className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${emailEnabled?"translate-x-4":""}`}/></span>
             {emailEnabled?"Emails ON":"Emails OFF"}
           </button>
+        </div>
+      </SC>
+
+      {/* STRIPE (Test/Live) */}
+      <SC title="Stripe Payments">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="max-w-xl">
+              <div className="text-sm font-semibold text-stone-800">Card payments via Stripe</div>
+              <p className="text-xs text-stone-500 mt-1">When ON, card checkout redirects to Stripe's secure hosted page and the order is confirmed by webhook. When OFF, card checkout runs in the built-in demo mode (no real charge).</p>
+            </div>
+            <button onClick={()=>setStripe({enabled:!stripeCfg.enabled})} className={`shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border ${stripeCfg.enabled?"bg-emerald-50 text-emerald-700 border-emerald-200":"bg-stone-100 text-stone-600 border-stone-200"}`}>
+              <span className={`w-9 h-5 rounded-full flex items-center px-0.5 ${stripeCfg.enabled?"bg-emerald-500":"bg-stone-300"}`}><span className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${stripeCfg.enabled?"translate-x-4":""}`}/></span>
+              {stripeCfg.enabled?"Stripe ON":"Stripe OFF"}
+            </button>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap border-t border-stone-100 pt-4">
+            <span className="text-sm font-medium text-stone-700">Environment</span>
+            <div className="inline-flex bg-stone-100 rounded-full p-1">
+              {[["test","Test"],["live","Live"]].map(([v,l])=><button key={v} onClick={()=>setStripe({mode:v})} className={`px-4 py-1.5 rounded-full text-xs font-semibold ${stripeCfg.mode===v?(v==="live"?"bg-blue-900 text-white":"bg-amber-500 text-white"):"text-stone-600"}`}>{l}</button>)}
+            </div>
+            <span className={`text-xs font-semibold px-2 py-1 rounded ${stripeCfg.mode==="live"?"bg-blue-50 text-blue-700":"bg-amber-50 text-amber-700"}`}>{stripeCfg.mode==="live"?"LIVE — real charges":"TEST — no real charges"}</span>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <F label="Publishable key — Test (pk_test_…)"><Inp value={stripeCfg.pk_test} onChange={v=>setStripe({pk_test:v})} placeholder="pk_test_..."/></F>
+            <F label="Publishable key — Live (pk_live_…)"><Inp value={stripeCfg.pk_live} onChange={v=>setStripe({pk_live:v})} placeholder="pk_live_..."/></F>
+          </div>
+          <div className="text-xs text-stone-500 bg-stone-50 border border-stone-200 rounded-lg p-3">🔒 The <strong>secret</strong> and <strong>webhook</strong> keys are never stored here — set them once in Supabase as Edge Function secrets: <code className="bg-white px-1 rounded">STRIPE_SECRET_TEST</code>, <code className="bg-white px-1 rounded">STRIPE_SECRET_LIVE</code>, <code className="bg-white px-1 rounded">STRIPE_WEBHOOK_TEST</code>, <code className="bg-white px-1 rounded">STRIPE_WEBHOOK_LIVE</code>. Webhook URL: <code className="bg-white px-1 rounded">{`${import.meta.env.VITE_SUPABASE_URL||""}/functions/v1/stripe-webhook`}</code></div>
         </div>
       </SC>
 
@@ -3017,15 +3047,14 @@ function generateSignedPdf(c,{clientSig,repSig,repName,company={},clientSignedAt
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   PAYMENTS ADAPTER — single seam to swap the simulated flow for real Stripe.
-   DEMO (STRIPE_LIVE=false): resolves after a short delay; no network, no keys.
-   PROD (STRIPE_LIVE=true): POSTs the cart to the backend, which creates a Stripe
-     Checkout Session with the SECRET key (server-side) and returns { url }; we
-     redirect the browser to Stripe's hosted page. The webhook later marks the
-     order Paid. Nothing here ever touches the secret/webhook keys.
-   Backend contract: see docs/stripe-integration.md
+   PAYMENTS ADAPTER — real Stripe via the `stripe-checkout` Supabase Edge Function.
+   The Edge Function reads settings.stripe_public {enabled,mode} server-side and
+   picks STRIPE_SECRET_TEST / STRIPE_SECRET_LIVE accordingly, creates a Checkout
+   Session and returns { url }; we redirect the browser to Stripe's hosted page.
+   The `stripe-webhook` function later marks the order Confirmed/paid by order_ref.
+   The client never touches the secret/webhook keys. When Stripe is OFF (or not
+   configured / no url returned) we fall back to the built-in demo round-trip.
    ───────────────────────────────────────────────────────────────────────── */
-const STRIPE_LIVE=false; /* flip to true once the backend host is connected */
 /* Map cart lines to Stripe-style line items (amounts in cents) for the backend */
 function cartToStripeLineItems(cart){
   return (cart||[]).map(i=>({
@@ -3036,16 +3065,23 @@ function cartToStripeLineItems(cart){
     fleet_id:i.uid||null,
   }));
 }
-async function startStripeCheckout({cart,amount,orderRef,successUrl,cancelUrl}){
-  if(STRIPE_LIVE){
-    const res=await fetch("/api/checkout/stripe",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({line_items:cartToStripeLineItems(cart),amount_cents:Math.round((amount||0)*100),order_ref:orderRef,success_url:successUrl,cancel_url:cancelUrl})});
-    if(!res.ok)throw new Error("checkout_failed");
-    const {url}=await res.json();
-    window.location.assign(url); /* hand off to Stripe-hosted checkout */
-    return {redirected:true};
+async function startStripeCheckout({cart,amount,orderRef,successUrl,cancelUrl,email}){
+  if(isSupabaseConfigured&&supabase){
+    try{
+      const {data,error}=await supabase.functions.invoke("stripe-checkout",{body:{
+        line_items:cartToStripeLineItems(cart),
+        amount_cents:Math.round((amount||0)*100),
+        order_ref:orderRef,customer_email:email||null,
+        success_url:successUrl,cancel_url:cancelUrl,
+      }});
+      if(!error&&data?.url){
+        window.location.assign(data.url); /* hand off to Stripe-hosted checkout */
+        return {redirected:true};
+      }
+      /* enabled:false or misconfig → the function returns {disabled:true} (no url) → demo */
+    }catch(e){console.warn("[stripe-checkout]",e?.message);}
   }
-  /* DEMO: no backend — simulate the round-trip to the hosted page */
+  /* DEMO / fallback: no real charge — simulate the round-trip to the hosted page */
   await new Promise(r=>setTimeout(r,1400));
   return {redirected:false,simulated:true};
 }
@@ -3911,7 +3947,8 @@ export default function App(){
     if(!cart.length)return;
     setCartOpen(false);setView("checkout");
   };
-  const confirmOrder=(payMethod,payDetail)=>{
+  const confirmOrder=(payMethod,payDetail,opts={})=>{
+    const forcePending=!!opts.forcePending; /* real Stripe: create the reservation as Pending; the webhook confirms it by order_ref=gid */
     /* Final availability check — prevent double-booking at the last second */
     for(const item of cart){
       if(!item.uid||!item.sd||!item.ed)continue;
@@ -3931,8 +3968,8 @@ export default function App(){
     }
     const invBase="INV-"+String(orders.length+100).padStart(4,"0");
     const today=new Date().toISOString().split("T")[0];
-    /* Stripe & company credit are auto-approved. Zelle/Cash: pending manual validation. */
-    const auto=payMethod==="card"||payMethod==="credit";
+    /* Company credit is auto-approved. Card via Stripe → Pending until the webhook confirms. Zelle/Cash: pending manual validation. */
+    const auto=(payMethod==="card"||payMethod==="credit")&&!forcePending;
     const expISO=new Date(Date.now()+PENDING_TTL_DAYS*86400000).toISOString();
     const gid="GRP-"+Math.random().toString(36).substr(2,8).toUpperCase(); /* one purchase = one group = one contract */
     const nw=cart.map((i,idx)=>({...i,
@@ -3940,7 +3977,7 @@ export default function App(){
       gid,
       invNum:invBase+(cart.length>1?"-"+(idx+1):""),
       status:auto?"Confirmed":"Pending",
-      payState:auto?"approved":(payMethod==="cash"?"awaiting_cash":"awaiting_validation"),
+      payState:auto?"approved":(forcePending?"awaiting_gateway":(payMethod==="cash"?"awaiting_cash":"awaiting_validation")),
       approvedAt:auto?nowISO():null,
       expiresAt:auto?null:expISO,
       phase:"reservation",
@@ -3994,9 +4031,10 @@ export default function App(){
         return{...sp,status:"occupied",...rentalEntry,activeOid:matched.oid,activeInvNum:matched.invNum};
       }));
     }
-    /* Trigger alarm for admin — manual-validation payments (Zelle/Cash/Invoice) need attention */
-    if(alarmEnabled&&!auto)setAlarmActive(true);
+    /* Trigger alarm for admin — manual-validation payments (Zelle/Cash/Invoice) need attention. Gateway-pending (Stripe) auto-confirms via webhook, no alarm. */
+    if(alarmEnabled&&!auto&&!forcePending)setAlarmActive(true);
     setCart([]);setView("client");
+    return gid;
   };
   /* Sales "book on behalf of a contact": reuses the whole public catalog + cart, then schedules the cart as Pending orders for that contact (tagged salesRep). No payment/signature — that's for the client/admin later. */
   const scheduleCartBySales=()=>{
@@ -4881,6 +4919,9 @@ function Ct({cart,rm,co,total,sv,user,dl,dr}){
 function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},creditLine,creditUsed=0,savedPays=[],mySignature,saveMySignature}){
   const [sigModal,setSigModal]=useState(false);
   const [agreeSign,setAgreeSign]=useState(false);
+  /* Card checkout uses real Stripe only when the admin enabled it (settings.stripe_public) */
+  const [stripeCfg]=useSetting("stripe_public",{enabled:false,mode:"test",pk_test:"",pk_live:""});
+  const stripeOn=!!stripeCfg?.enabled;
   /* Default to the client's default saved method (card/cash) so it opens first */
   const _defType=(savedPays.find(p=>p.isDefault)||savedPays[0]||{}).type;
   const [payMethod,setPayMethod]=useState(_defType==="cash"?"cash":"card");
@@ -4906,12 +4947,23 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},cred
       if(!creditLine||grandTotal>creditAvail)return; /* guarded by the panel message */
       confirm(payMethod,payDetail);setStep("done");return;
     }
-    /* Stripe: hand off to the payments adapter (simulated now, real Checkout Session once the backend is live) */
+    /* Card: real Stripe when enabled by the admin, else the built-in demo round-trip */
     if(payMethod==="card"){
       setStep("redirect");
-      startStripeCheckout({cart,amount:totalDep,orderRef:"CART-"+Date.now(),successUrl:location.href,cancelUrl:location.href})
-        .then(r=>{if(r.redirected)return; /* real Stripe navigated away; webhook will confirm */ confirm(payMethod,payDetail);setStep("done");})
-        .catch(()=>setStep("payment")); /* on error, return to method selection */
+      if(stripeOn){
+        /* Real Stripe: create the reservation as Pending (awaiting_gateway) FIRST so the
+           webhook can confirm it by order_ref=gid, then hand off to Stripe's hosted page. */
+        const snap=cart.slice();
+        const gid=confirm(payMethod,payDetail,{forcePending:true});
+        startStripeCheckout({cart:snap,amount:totalDep,orderRef:gid,email:user?.email,successUrl:location.href,cancelUrl:location.href})
+          .then(r=>{if(r.redirected)return; /* fallback: order stays Pending for manual validation */ setStep("done");})
+          .catch(()=>setStep("done"));
+      }else{
+        /* Demo mode: simulate the round-trip, then confirm the order normally */
+        startStripeCheckout({cart,amount:totalDep,orderRef:"CART-"+Date.now(),email:user?.email,successUrl:location.href,cancelUrl:location.href})
+          .then(r=>{if(r.redirected)return; confirm(payMethod,payDetail);setStep("done");})
+          .catch(()=>setStep("payment")); /* on error, return to method selection */
+      }
       return;
     }
     confirm(payMethod,payDetail);
