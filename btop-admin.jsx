@@ -2498,6 +2498,18 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
   const [stripeCfg,setStripeCfg]=useSetting("stripe_public",{enabled:false,mode:"test",pk_test:"",pk_live:""});
   const setStripe=(patch)=>setStripeCfg({...stripeCfg,...patch});
   const [showKeys,setShowKeys]=useState(false);
+  /* Secret & webhook keys: write-only. We can never read them back, so we track
+     only a "set" marker (in the public stripe_public row) to show status. */
+  const [secretDraft,setSecretDraft]=useState({sk_test:"",sk_live:"",wh_test:"",wh_live:""});
+  const [secretFlash,setSecretFlash]=useState("");
+  const saveSecret=async(field,key)=>{
+    const val=(secretDraft[field]||"").trim(); if(!val||!supabase)return;
+    const {error}=await supabase.from("secure_settings").upsert({key,value:val,updated_at:new Date().toISOString()});
+    if(error){setSecretFlash("error:"+field);return;}
+    setStripe({[field+"_set"]:true});
+    setSecretDraft(d=>({...d,[field]:""}));
+    setSecretFlash("ok:"+field);setTimeout(()=>setSecretFlash(""),2500);
+  };
   const [gwEdit,setGwEdit]=useState(null);
   const [editHours,setEditHours]=useState(false);
   const [editCompany,setEditCompany]=useState(false);
@@ -2616,7 +2628,26 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
                 <F label="Test (pk_test_…)"><Inp value={stripeCfg.pk_test} onChange={v=>setStripe({pk_test:v})} placeholder="pk_test_..." type={showKeys?"text":"password"}/></F>
                 <F label="Live (pk_live_…)"><Inp value={stripeCfg.pk_live} onChange={v=>setStripe({pk_live:v})} placeholder="pk_live_..." type={showKeys?"text":"password"}/></F>
               </div>
-              <div className="text-xs text-stone-500 bg-stone-50 border border-stone-200 rounded-lg p-3">🔒 The private keys are managed securely on the server and are never shown or stored in this panel.</div>
+              <div className="space-y-3 border-t border-stone-100 pt-4">
+                <div className="flex items-center gap-2 text-xs font-medium text-stone-600">🔒 Private keys — stored securely on the server. For your protection they can be saved but never displayed again.</div>
+                {[
+                  {f:"sk_test",k:"stripe_sk_test",label:"Secret key — Test (sk_test_…)",ph:"sk_test_..."},
+                  {f:"sk_live",k:"stripe_sk_live",label:"Secret key — Live (sk_live_…)",ph:"sk_live_..."},
+                  {f:"wh_test",k:"stripe_wh_test",label:"Webhook secret — Test (whsec_…)",ph:"whsec_..."},
+                  {f:"wh_live",k:"stripe_wh_live",label:"Webhook secret — Live (whsec_…)",ph:"whsec_..."},
+                ].map(row=>(
+                  <div key={row.f}>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-medium text-stone-700">{row.label}</label>
+                      {stripeCfg[row.f+"_set"]&&<span className="text-[11px] font-semibold text-emerald-600 inline-flex items-center gap-1"><Check className="w-3 h-3"/>Saved</span>}
+                    </div>
+                    <div className="flex gap-2">
+                      <input type="password" value={secretDraft[row.f]} onChange={e=>setSecretDraft(d=>({...d,[row.f]:e.target.value}))} placeholder={stripeCfg[row.f+"_set"]?"•••••••• (saved — type to replace)":row.ph} className="flex-1 px-4 py-2.5 bg-white border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+                      <button onClick={()=>saveSecret(row.f,row.k)} disabled={!(secretDraft[row.f]||"").trim()} className="shrink-0 px-4 py-2.5 bg-blue-900 text-white rounded-xl text-xs font-semibold disabled:opacity-40">{secretFlash==="ok:"+row.f?"Saved ✓":secretFlash==="error:"+row.f?"Error":"Save"}</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
               <div className="flex justify-end"><button onClick={()=>setGwEdit(null)} className="px-4 py-2 bg-blue-900 text-white rounded-full text-sm">Done</button></div>
             </div>}
           </div>
