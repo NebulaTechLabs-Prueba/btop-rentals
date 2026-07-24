@@ -521,7 +521,7 @@ function DetailedFleetMod({fleet,bookings=[],setFleet}){
 
   const getUnitCode=(v)=>v.plate||`UNIT-${v.id}`;
   const getBookings=(v)=>bookings.filter(b=>b.vid===v.id);
-  const getNow=(v)=>{const now=td.toISOString().split("T")[0];return bookings.find(b=>b.vid===v.id&&b.start<=now&&b.end>=now)};
+  const getNow=(v)=>{const now=td.toISOString().split("T")[0];return bookings.find(b=>b.vid===v.id&&b.requestStatus!=="pending_approval"&&b.start<=now&&b.end>=now)};
 
   /* Get unique product models for the "base" selector */
   const uniqueModels=[...new Set(fleet.map(v=>`${v.year} ${v.name} [${v.category}]`))];
@@ -706,8 +706,8 @@ function MaintenanceMod({fleet,spaces,bookings=[],setBookings,onViewUnit}){
 
   const isRented=(vid)=>bookings.some(b=>b.vid===vid&&b.type==="rental"&&b.start<=now&&b.end>=now);
 
-  const approveRequest=(b)=>{if(setBookings)setBookings(p=>p.map(x=>(x===b)?{...x,requestStatus:"approved",approvedAt:new Date().toISOString().split("T")[0],autoApproved:false}:x))};
-  const rejectRequest=(b)=>{if(setBookings)setBookings(p=>p.filter(x=>x!==b))};
+  const approveRequest=(b)=>{if(setBookings)setBookings(p=>p.map(x=>(x.id===b.id)?{...x,requestStatus:"approved",approvedAt:new Date().toISOString().split("T")[0],autoApproved:false}:x))};
+  const rejectRequest=(b)=>{if(setBookings)setBookings(p=>p.filter(x=>x.id!==b.id))};
 
   /* Auto-approve: when enabled, any pending_approval request gets approved immediately */
   useEffect(()=>{
@@ -720,11 +720,11 @@ function MaintenanceMod({fleet,spaces,bookings=[],setBookings,onViewUnit}){
     if(!mf.itemId||!mf.endDate||!mf.reason)return;
     const item=mf.type==="fleet"?fleet.find(f=>f.id===mf.itemId):spaces.find(s=>s.id===mf.itemId);
     if(!item)return;
-    if(setBookings)setBookings(p=>[...p,{vid:mf.itemId,vname:item.name||item.year+" "+item.name,start:mf.startDate,end:mf.endDate,type:"maintenance",client:"",reason:mf.reason,mechanic:mf.mechanic,priority:mf.priority,notes:mf.notes,cost:mf.cost}]);
+    if(setBookings)setBookings(p=>[...p,{id:nid(),vid:mf.itemId,vname:item.name,start:mf.startDate,end:mf.endDate,type:"maintenance",client:"",reason:mf.reason,mechanic:mf.mechanic,priority:mf.priority,notes:mf.notes,cost:mf.cost}]);
     setMf({type:"fleet",itemId:"",reason:"",startDate:now,endDate:"",mechanic:"",priority:"normal",notes:"",cost:""});
     setCreating(false);
   };
-  const endMaint=(b)=>{if(setBookings)setBookings(p=>p.filter(x=>!(x.vid===b.vid&&x.type==="maintenance"&&x.start===b.start)))};
+  const endMaint=(b)=>{if(setBookings)setBookings(p=>p.filter(x=>b.id?x.id!==b.id:!(x.vid===b.vid&&x.type==="maintenance"&&x.start===b.start)))};
 
   return (
     <div>
@@ -3874,7 +3874,7 @@ export default function App(){
   const setDepositReturnPref=(updater)=>{if(!user)return;setDepositReturnAll(prev=>{const cur=prev[user.email]||{method:"bank"};const next=typeof updater==="function"?updater(cur):updater;return{...prev,[user.email]:next}})};
   const [creditLines,setCreditLines]=useCollection("credit_lines",{pk:"id",authKey:user?.email,keyCols:c=>({client_name:c.clientName,email:c.email}),seed:[]});
   const [orders,setOrders]=useCollection("orders",{pk:"oid",authKey:user?.email,keyCols:o=>({customer_email:o.ue,status:o.status,sales_rep:o.salesRep,gid:o.gid,inv_num:o.invNum}),seed:[]});
-  const [fleetBookings,setFleetBookings]=useState([]);
+  const [fleetBookings,setFleetBookings]=useCollection("bookings",{pk:"id",authKey:user?.email,keyCols:b=>({vid:b.vid,type:b.type}),seed:[]});
   const [deliveries,setDeliveries]=useCollection("deliveries",{pk:"id",authKey:user?.email,seed:[]});
   const [messages,setMessages]=useCollection("messages",{pk:"id",authKey:user?.email,keyCols:m=>({from_name:m.name,from_email:m.email}),seed:[]});
   const addMessage=(m)=>setMessages(p=>[{...m,id:nid(),date:new Date().toISOString().split("T")[0],read:false},...p]);
@@ -6689,7 +6689,7 @@ function HQMod({deliveries,setDeliveries,bookings,setBookings}){
     setDeliveries(p=>p.map(x=>x.id===id?{...x,status:"returned"}:x));
     if(d?.damaged&&d?.damageDesc&&setBookings){
       const today=new Date().toISOString().split("T")[0];const endEst=new Date();endEst.setDate(endEst.getDate()+14);
-      setBookings(p=>[...p,{vid:d.vid,vname:d.vehicle,start:today,end:endEst.toISOString().split("T")[0],type:"maintenance",client:"",reason:"Accident Repair",mechanic:"",priority:"urgent",notes:`DAMAGE REPORT: ${d.damageDesc} — From delivery ${d.oid}`,cost:"",isDamage:true}]);
+      setBookings(p=>[...p,{id:nid(),vid:d.vid,vname:d.vehicle,start:today,end:endEst.toISOString().split("T")[0],type:"maintenance",client:"",reason:"Accident Repair",mechanic:"",priority:"urgent",notes:`DAMAGE REPORT: ${d.damageDesc} — From delivery ${d.oid}`,cost:"",isDamage:true,requestStatus:"pending_approval",requestedBy:"HQ",requestedAt:today}]);
     }
   };
   const uDel=(id,k,v)=>{setDeliveries(p=>p.map(x=>x.id===id?{...x,[k]:v}:x));if(sel?.id===id)setSel(p=>({...p,[k]:v}))};
@@ -6792,12 +6792,12 @@ function FieldHQ({fleet,spaces,deliveries,setDeliveries,bookings=[],setBookings,
     if(!mf.vid||!mf.endDate)return;
     const v=fleet.find(f=>f.id===mf.vid);
     /* Create as PENDING APPROVAL — admin will approve to activate in fleet */
-    if(setBookings)setBookings(p=>[...p,{vid:mf.vid,vname:v?v.name:"Unknown",start:mf.startDate,end:mf.endDate,type:"maintenance",client:"",reason:mf.reason,mechanic:mf.mechanic,priority:mf.priority,notes:mf.notes,requestStatus:"pending_approval",requestedBy:user.name,requestedAt:new Date().toISOString().split("T")[0]}]);
+    if(setBookings)setBookings(p=>[...p,{id:nid(),vid:mf.vid,vname:v?v.name:"Unknown",start:mf.startDate,end:mf.endDate,type:"maintenance",client:"",reason:mf.reason,mechanic:mf.mechanic,priority:mf.priority,notes:mf.notes,requestStatus:"pending_approval",requestedBy:user.name,requestedAt:new Date().toISOString().split("T")[0]}]);
     setMf({vid:"",reason:"",startDate:new Date().toISOString().split("T")[0],endDate:"",mechanic:"",priority:"normal",notes:""});
     setMaintForm(false);
   };
   const endMaint=(b)=>{
-    if(setBookings)setBookings(p=>p.filter(x=>!(x.vid===b.vid&&x.type==="maintenance"&&x.start===b.start)));
+    if(setBookings)setBookings(p=>p.filter(x=>b.id?x.id!==b.id:!(x.vid===b.vid&&x.type==="maintenance"&&x.start===b.start)));
   };
   const [newForm,setNewForm]=useState({type:"fleet",itemId:"",oid:"",client:"",milesOut:"",fuelOut:"",conditionOut:"",tireCondition:"",lightsOk:true,brakeCondition:"Good",fluidLevels:"OK",cleanInterior:true,cleanExterior:true,notesOut:""});
   const uNew=(k,v)=>setNewForm(p=>({...p,[k]:v}));
@@ -6829,7 +6829,7 @@ function FieldHQ({fleet,spaces,deliveries,setDeliveries,bookings=[],setBookings,
     if(d.damaged&&d.damageDesc&&setBookings){
       const today=new Date().toISOString().split("T")[0];
       const endEst=new Date();endEst.setDate(endEst.getDate()+14);
-      setBookings(p=>[...p,{vid:d.vid,vname:d.vehicle,start:today,end:endEst.toISOString().split("T")[0],type:"maintenance",client:"",reason:"Accident Repair",mechanic:"",priority:"urgent",notes:`DAMAGE REPORT: ${d.damageDesc} — Reported by ${user.name} on return of ${d.oid}`,cost:"",isDamage:true}]);
+      setBookings(p=>[...p,{id:nid(),vid:d.vid,vname:d.vehicle,start:today,end:endEst.toISOString().split("T")[0],type:"maintenance",client:"",reason:"Accident Repair",mechanic:"",priority:"urgent",notes:`DAMAGE REPORT: ${d.damageDesc} — Reported by ${user.name} on return of ${d.oid}`,cost:"",isDamage:true,requestStatus:"pending_approval",requestedBy:user.name,requestedAt:today}]);
     }
     setSel({...d,status:"returned"});
   };
