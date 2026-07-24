@@ -4714,16 +4714,16 @@ function Home({fleet,sv,ac,t,bookings=[],cart=[],orders=[],spaces:propSpaces}){
     <section style={{padding:"0 24px 100px"}}><div style={{maxWidth:1280,margin:"0 auto"}}>
       <div style={{textAlign:"center",marginBottom:60}}><div className="bd bb" style={{marginBottom:16}}>Our Fleet</div><h2 className="st">Trucks & Equipment Ready to Rent</h2></div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:24}}>
-        {fleet.map(u=><div key={u.id} className="cd" style={{display:"flex",flexDirection:"column"}}>
-          <div style={{background:"linear-gradient(135deg,var(--b0),var(--b1))",padding:32,textAlign:"center",position:"relative"}}><div className="bd bb" style={{position:"absolute",top:16,left:16}}>{u.cat}</div><div style={{fontSize:64}}>{u.img}</div></div>
+        {groupByModel(fleet).map(g=>{const u=g.sample;const total=g.units.length;const freeNow=availableToday(g.units,bookings,cart,orders).length;return <div key={g.key} className="cd" style={{display:"flex",flexDirection:"column"}}>
+          <div style={{background:"linear-gradient(135deg,var(--b0),var(--b1))",padding:32,textAlign:"center",position:"relative"}}><div className="bd bb" style={{position:"absolute",top:16,left:16}}>{u.cat}</div>{total>1&&<div style={{position:"absolute",top:16,right:16,fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:12,background:freeNow===0?"#FEE2E2":"#D1FAE5",color:freeNow===0?"#991B1B":"#065F46"}}>{freeNow}/{total} available</div>}<div style={{fontSize:64}}>{u.img}</div></div>
           <div style={{padding:24,flex:1,display:"flex",flexDirection:"column"}}>
             <h3 style={{fontWeight:700,fontSize:18,color:"var(--navy)",marginBottom:4}}>{u.year} {u.name}</h3>
-            <div style={{color:"var(--g5)",fontSize:13,marginBottom:12}}>{u.type} • #{u.id}</div>
+            <div style={{color:"var(--g5)",fontSize:13,marginBottom:12}}>{u.type}{total>1?` · ${total} unidades`:""}</div>
             <p style={{color:"var(--g5)",fontSize:14,lineHeight:1.6,marginBottom:20,flex:1}}>{u.desc}</p>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>{[["Daily",u.daily],["Weekly",u.weekly],["Monthly",u.monthly]].map(([l,p])=><div key={l} style={{textAlign:"center",padding:8,background:"var(--g0)",borderRadius:8}}><div style={{fontSize:10,color:"var(--g5)",fontWeight:600,textTransform:"uppercase"}}>{l}</div><div style={{fontFamily:"var(--fm)",fontWeight:700,color:"var(--navy)",fontSize:15}}>{$(p)}</div></div>)}</div>
             <button onClick={()=>document.getElementById("qb")?.scrollIntoView({behavior:"smooth"})} className="btn bp" style={{width:"100%",justifyContent:"center"}}><X n="cal" s={16}/>Rent Now</button>
           </div>
-        </div>)}
+        </div>;})}
       </div>
     </div></section>
 
