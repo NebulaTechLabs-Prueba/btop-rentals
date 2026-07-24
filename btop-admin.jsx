@@ -30,6 +30,11 @@ const VEHICLE_CATS=CATS.Vehicles;
 const CAT_ICON={"Yard Spotter":"🚛","Daycab":"🚚","Pickup":"🛻","Box Truck":"📦","Forklift":"🏗️","Loading Ramp":"🛗","Trencher":"⛏️","Air Conditioning":"❄️","Dolly":"🛒","Floor Scrubber":"🧽","Concrete Saw":"🪚","Canopy":"⛺","Cooler":"🧊","Propane Tank":"🛢️"};
 const catIcon=(c)=>CAT_ICON[c]||"🚐";
 const ALL_CATS=Object.values(CATS).flat();
+/* Categorías gestionables (persisten en settings.fleet_categories). Default = las actuales. */
+const DEFAULT_CATEGORIES=[
+  ...CATS.Vehicles.map(n=>({name:n,group:"Vehicles",icon:CAT_ICON[n]||"🚐"})),
+  ...CATS.Equipment.map(n=>({name:n,group:"Equipment",icon:CAT_ICON[n]||"📦"})),
+];
 const FUELS=["Diesel","Gasoline","Electric","LP Gas","Hybrid","N/A"];
 const TRANS=["Automatic","Manual","CVT","N/A"];
 const VSTAT=[{v:"available",l:"Available",t:"emerald"},{v:"rented",l:"Rented",t:"blue"},{v:"maintenance",l:"Maintenance",t:"amber"},{v:"out_of_service",l:"Out of Service",t:"red"}];
@@ -180,11 +185,11 @@ function usePagination(data,perPage=10){
 }
 
 /* ═══ PRODUCT EDITOR ═══ */
-function ProductEditor({item,onClose,onSave}){
+function ProductEditor({item,onClose,onSave,categories=ALL_CATS,vehicleCats=VEHICLE_CATS}){
   const [p,setP]=useState(item?{...item}:blankP());
   const [tab,setTab]=useState("basic");
   const u=(k,v)=>setP(prev=>({...prev,[k]:v}));
-  const isEquip=!VEHICLE_CATS.includes(p.category);
+  const isEquip=!vehicleCats.includes(p.category);
   const isNew=!item;
   const tabs=[{id:"basic",label:"Product",icon:Tag},{id:"pricing",label:"Pricing",icon:DollarSign},{id:"specs",label:"Specs",icon:Gauge},{id:"fuel",label:"Fuel",icon:Droplets},{id:"status",label:"Status",icon:CircleDot},{id:"docs",label:"Documents",icon:FileText},{id:"rules",label:"Rules",icon:Shield},{id:"commercial",label:"Commercial",icon:Info},{id:"controls",label:"Internal",icon:Lock}];
   const addDoc=(name)=>{const docs=[...(p.docs||[]),{name,date:new Date().toISOString().split("T")[0],id:nid()}];u("docs",docs)};
@@ -199,7 +204,7 @@ function ProductEditor({item,onClose,onSave}){
         <div className="flex gap-1 px-4 py-2 border-b border-stone-200 overflow-x-auto shrink-0">{tabs.map(t=>{const Ic=t.icon;return (<button key={t.id} onClick={()=>setTab(t.id)} className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap ${tab===t.id?"bg-blue-900 text-white":"text-stone-600 hover:bg-stone-100"}`}><Ic className="w-3.5 h-3.5"/>{t.label}</button>);})}</div>
         <div className="flex-1 overflow-y-auto px-6 py-6">
           {tab==="basic"&&<div className="space-y-5">
-            <div className="grid grid-cols-2 gap-4"><F label="Name *"><Inp value={p.name} onChange={v=>u("name",v)} placeholder="Freightliner Cascadia 2016"/></F><F label="Category *"><Sel value={p.category} onChange={v=>u("category",v)} options={ALL_CATS}/></F></div>
+            <div className="grid grid-cols-2 gap-4"><F label="Name *"><Inp value={p.name} onChange={v=>u("name",v)} placeholder="Freightliner Cascadia 2016"/></F><F label="Category *"><Sel value={p.category} onChange={v=>u("category",v)} options={categories}/></F></div>
             <div className="grid grid-cols-3 gap-4"><F label="Plate"><Inp value={p.plate} onChange={v=>u("plate",v)}/></F><F label="VIN"><Inp value={p.vin} onChange={v=>u("vin",v)}/></F><F label="Year"><Inp value={p.year} onChange={v=>u("year",v)} type="number"/></F></div>
             <div className="grid grid-cols-2 gap-4"><F label="Make"><Inp value={p.make} onChange={v=>u("make",v)}/></F><F label="Model"><Inp value={p.model} onChange={v=>u("model",v)}/></F></div>
             <F label="Photos"><div className="flex gap-3">{[0,1,2,3].map(i=>(<div key={i} className="w-20 h-20 bg-stone-100 border-2 border-dashed border-stone-200 rounded-xl flex items-center justify-center cursor-pointer hover:bg-stone-50"><ImagePlus className="w-4 h-4 text-stone-400"/></div>))}</div></F>
@@ -390,10 +395,58 @@ function SpaceEditor({item,onClose,onSave}){
   );
 }
 
+/* ═══ CATEGORY MANAGER ═══ */
+function CategoryManager({categories,setCategories,fleet=[],onClose}){
+  const [nc,setNc]=useState({name:"",group:"Equipment",icon:""});
+  const groups=["Vehicles","Equipment"];
+  const usage=(name)=>fleet.filter(v=>(v.category||v.cat)===name).length;
+  const exists=(n)=>categories.some(c=>c.name.toLowerCase()===n.trim().toLowerCase());
+  const add=()=>{const n=nc.name.trim();if(!n||exists(n))return;setCategories([...categories,{name:n,group:nc.group,icon:nc.icon.trim()||(nc.group==="Vehicles"?"🚐":"📦")}]);setNc({name:"",group:"Equipment",icon:""})};
+  const del=(name)=>setCategories(categories.filter(c=>c.name!==name));
+  const patch=(name,k,v)=>setCategories(categories.map(c=>c.name===name?{...c,[k]:v}:c));
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200">
+        <div><h2 className="text-lg font-semibold">Manage Categories</h2><p className="text-xs text-stone-500">These feed the Category dropdown when adding/editing units. Saved to your account.</p></div>
+        <button onClick={onClose} className="p-2 hover:bg-stone-100 rounded-full"><Xx className="w-5 h-5"/></button>
+      </div>
+      <div className="p-5 overflow-y-auto space-y-5">
+        <div className="bg-stone-50 border border-stone-200 rounded-xl p-4">
+          <div className="text-xs font-semibold text-stone-600 mb-2">Add category</div>
+          <div className="flex gap-2 flex-wrap items-end">
+            <div style={{width:60}}><label className="block text-[11px] text-stone-500 mb-1">Icon</label><input value={nc.icon} onChange={e=>setNc({...nc,icon:e.target.value})} placeholder="📦" maxLength={4} className="w-full text-center px-2 py-2 border border-stone-200 rounded-lg text-lg"/></div>
+            <div className="flex-1 min-w-[160px]"><label className="block text-[11px] text-stone-500 mb-1">Name</label><input value={nc.name} onChange={e=>setNc({...nc,name:e.target.value})} placeholder="e.g. Trailer" className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm"/></div>
+            <div style={{minWidth:130}}><label className="block text-[11px] text-stone-500 mb-1">Group</label><select value={nc.group} onChange={e=>setNc({...nc,group:e.target.value})} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm">{groups.map(g=><option key={g} value={g}>{g}</option>)}</select></div>
+            <button onClick={add} disabled={!nc.name.trim()||exists(nc.name)} className="px-4 py-2 bg-blue-900 text-white rounded-lg text-sm font-semibold disabled:opacity-40">Add</button>
+          </div>
+          {nc.name.trim()&&exists(nc.name)&&<div className="text-[11px] text-amber-700 mt-1">That category already exists.</div>}
+        </div>
+        {groups.map(g=><div key={g}>
+          <div className="text-xs font-bold uppercase tracking-wide text-stone-400 mb-2">{g}</div>
+          <div className="space-y-2">
+            {categories.filter(c=>c.group===g).map(c=>{const n=usage(c.name);return <div key={c.name} className="flex items-center gap-3 border border-stone-200 rounded-lg px-3 py-2">
+              <input value={c.icon} onChange={e=>patch(c.name,"icon",e.target.value)} maxLength={4} className="w-10 text-center text-lg border border-stone-200 rounded"/>
+              <div className="flex-1"><div className="text-sm font-medium">{c.name}</div><div className="text-[11px] text-stone-400">{n} unit{n===1?"":"s"}</div></div>
+              <select value={c.group} onChange={e=>patch(c.name,"group",e.target.value)} className="text-xs border border-stone-200 rounded px-2 py-1">{groups.map(x=><option key={x} value={x}>{x}</option>)}</select>
+              <button onClick={()=>{if(n>0&&!window.confirm(`"${c.name}" lo usan ${n} unidad(es). ¿Quitarla de la lista igual? Esas unidades conservan su categoría pero ya no será seleccionable.`))return;del(c.name)}} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+            </div>})}
+            {categories.filter(c=>c.group===g).length===0&&<div className="text-xs text-stone-400 italic">None</div>}
+          </div>
+        </div>)}
+      </div>
+      <div className="px-6 py-3 border-t border-stone-200 flex justify-end"><button onClick={onClose} className="px-4 py-2 bg-blue-900 text-white rounded-full text-sm font-semibold">Done</button></div>
+    </div>
+  </div>;
+}
+
 /* ═══ FLEET ═══ */
 function FleetMod({fleet,setFleet,bookings=[],orders=[]}){
   const [tab,setTab]=useState("vehicles");const [filter,setFilter]=useState("all");const [editing,setEditing]=useState(null);const [creating,setCreating]=useState(false);
   const [delTarget,setDelTarget]=useState(null); /* {unit, sameModelUnits, blockingReservations, blockingBookings} */
+  const [categories,setCategories]=useSetting("fleet_categories",DEFAULT_CATEGORIES);
+  const [showCats,setShowCats]=useState(false);
+  const catNames=categories.map(c=>c.name);
+  const vehicleCats=categories.filter(c=>c.group==="Vehicles").map(c=>c.name);
   const filtered=filter==="all"?fleet:fleet.filter(v=>v.status===filter);
   const save=p=>{if(fleet.find(v=>v.id===p.id))setFleet(pr=>pr.map(v=>v.id===p.id?p:v));else setFleet(pr=>[p,...pr]);setEditing(null);setCreating(false)};
   const tabs=[{id:"vehicles",l:"Vehicles",c:fleet.length},{id:"pricing",l:"Pricing",c:fleet.length}];
@@ -417,7 +470,8 @@ function FleetMod({fleet,setFleet,bookings=[],orders=[]}){
   };
   return (
     <div>
-      <div className="flex items-start justify-between gap-4 mb-6 flex-wrap"><p className="text-stone-600 max-w-xl">Manage fleet, pricing, and maintenance.</p><button onClick={()=>setCreating(true)} className="inline-flex items-center gap-2 bg-blue-900 text-white px-4 py-2.5 rounded-full hover:bg-blue-700 shrink-0"><Plus className="w-4 h-4"/>Add Vehicle</button></div>
+      <div className="flex items-start justify-between gap-4 mb-6 flex-wrap"><p className="text-stone-600 max-w-xl">Manage fleet, pricing, and maintenance.</p><div className="flex items-center gap-2 shrink-0"><button onClick={()=>setShowCats(true)} className="inline-flex items-center gap-2 border border-stone-200 text-stone-700 px-4 py-2.5 rounded-full hover:bg-stone-50"><Tag className="w-4 h-4"/>Categories ({categories.length})</button><button onClick={()=>setCreating(true)} className="inline-flex items-center gap-2 bg-blue-900 text-white px-4 py-2.5 rounded-full hover:bg-blue-700"><Plus className="w-4 h-4"/>Add Vehicle</button></div></div>
+      {showCats&&<CategoryManager categories={categories} setCategories={setCategories} fleet={fleet} onClose={()=>setShowCats(false)}/>}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6"><St label="Total" value={fleet.length} delta={`${new Set(fleet.map(v=>v.category)).size} categories`} trend="up" icon={Truck} breakdown={{
         formula:"Count of all rows in the Fleet table",
         source:"Fleet table — every physical unit (one row per plate)",
@@ -453,7 +507,7 @@ function FleetMod({fleet,setFleet,bookings=[],orders=[]}){
           </div>);})}</div>
       </>}
       {tab==="pricing"&&<SC title="Pricing Matrix" padded={false}><DT headers={["Vehicle","Cat","Daily","Weekly","Monthly","Mile (D/W/M)","Deposit (D/W/M)","Tiers",""]} rows={fleet.map(v=>[<div><div className="font-medium">{v.year} {v.name}</div><div className="text-xs text-stone-500">{v.make} {v.model}</div></div>,<Pill tone="blue">{v.category}</Pill>,<span className="font-semibold">{$f(v.daily)}</span>,<span className="font-semibold">{$f(v.weekly)}</span>,<span className="font-semibold">{$f(v.monthly)}</span>,(v.mileDaily>0?`$${v.mileDaily}/$${v.mileWeekly}/$${v.mileMonthly}`:"—"),`${$f(v.depositDaily)}/${$f(v.depositWeekly)}/${$f(v.depositMonthly)}`,(v.mileTiers||[]).length>0?<Pill tone="blue">{(v.mileTiers||[]).length} tiers</Pill>:"—",<button onClick={()=>setEditing(v)} className="p-1.5 hover:bg-stone-100 rounded-lg"><Pencil className="w-3.5 h-3.5"/></button>])}/></SC>}
-      {(editing||creating)&&<ProductEditor item={editing} onClose={()=>{setEditing(null);setCreating(false)}} onSave={save}/>}
+      {(editing||creating)&&<ProductEditor item={editing} onClose={()=>{setEditing(null);setCreating(false)}} onSave={save} categories={catNames} vehicleCats={vehicleCats}/>}
 
       {/* DELETE MODAL — two branches: blocked vs confirm */}
       {delTarget&&(()=>{const blocked=delTarget.blockingReservations.length>0||delTarget.blockingBookings.length>0;
