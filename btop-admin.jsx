@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, createContext, useContext } from "react";
+import { useState, useEffect, useRef, useCallback, createContext, useContext } from "react";
 import { jsPDF } from "jspdf";
 import { usePersistentState } from "./src/lib/persistence.js";
 import { loadFleetUnits, loadSpaces, loadProfiles, syncFleetUnits, syncSpaces } from "./src/lib/catalog.js";
@@ -5514,17 +5514,18 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout,creditLine,orders_all
   const [delModal,setDelModal]=useState(false);
   const [delConfirmEmail,setDelConfirmEmail]=useState("");
 
-  const upProf=(k,v)=>sProf(p=>({...p,[k]:v}));
+  const upProf=useCallback((k,v)=>sProf(p=>({...p,[k]:v})),[]);
   const togglePay=(id)=>sPays(p=>p.map(m=>({...m,isDefault:m.id===id})));
   const rmPay=(id)=>sPays(p=>p.filter(m=>m.id!==id));
   const addCard=()=>{sPays(p=>[...p,{id:Date.now(),type:"card",label:"Card •••• "+Math.floor(1000+Math.random()*9000),nameOnCard:newCard.name||user.name,isDefault:!p.length,status:"active"}]);sNewCard({name:""});sPayView("list");t&&t("Card saved — it will pre-fill at checkout","success")};
   const addCash=()=>{if(!cashForm.name||!cashForm.confirm)return;sPays(p=>[...p,{id:Date.now(),type:"cash",label:"Cash – "+cashForm.name,cashName:cashForm.name,cashPhone:cashForm.phone,isDefault:!p.length,status:"active"}]);sCashForm({name:"",phone:"",confirm:false,time:""});sPayView("list");t&&t("Cash method saved — it will pre-fill at checkout","success")};
   const addInvoice=()=>{if(!invForm.company||!invForm.taxId||!invForm.address||!invForm.billingEmail)return;sPays(p=>[...p,{id:Date.now(),type:"invoice",label:"Invoice – "+invForm.company,isDefault:!p.length,status:"active"}]);sInvForm({company:"",taxId:"",address:"",billingEmail:"",contact:"",phone:"",notes:""});sPayView("list");t&&t("Billing info saved","success")};
 
-  const S=({l,children})=><div style={{marginBottom:24}}><h3 style={{fontWeight:700,fontSize:16,color:"var(--navy)",marginBottom:16,paddingBottom:8,borderBottom:"2px solid var(--b1)"}}>{l}</h3>{children}</div>;
-  const F=({l,v,k,type="text",ph="",opts})=>opts?
+  const S=useCallback(({l,children})=><div style={{marginBottom:24}}><h3 style={{fontWeight:700,fontSize:16,color:"var(--navy)",marginBottom:16,paddingBottom:8,borderBottom:"2px solid var(--b1)"}}>{l}</h3>{children}</div>,[]);
+  /* useCallback: identidad estable entre renders para que los inputs no pierdan el foco al teclear */
+  const F=useCallback(({l,v,k,type="text",ph="",opts})=>opts?
     <div className="ig" style={{flex:1,minWidth:200}}><label>{l}</label><select className="inf" value={v} onChange={e=>upProf(k,e.target.value)}>{opts.map(([ov,ol])=><option key={ov} value={ov}>{ol}</option>)}</select></div>
-    :<div className="ig" style={{flex:1,minWidth:200}}><label>{l}</label><input className="inf" type={type} value={v} onChange={e=>upProf(k,e.target.value)} placeholder={ph} disabled={!editing}/></div>;
+    :<div className="ig" style={{flex:1,minWidth:200}}><label>{l}</label><input className="inf" type={type} value={v} onChange={e=>upProf(k,e.target.value)} placeholder={ph} disabled={!editing}/></div>,[editing,upProf]);
   const Chk=({l,k})=><label style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:prof[k]?"var(--b0)":"var(--g0)",borderRadius:10,cursor:"pointer",border:prof[k]?"2px solid var(--b4)":"2px solid var(--g2)",transition:"all .2s"}}>
     <input type="checkbox" checked={prof[k]} onChange={e=>upProf(k,e.target.checked)} style={{width:18,height:18,accentColor:"var(--b6)"}}/><span style={{fontSize:14,fontWeight:prof[k]?600:400,color:prof[k]?"var(--b7)":"var(--g5)"}}>{l}</span>
   </label>;
