@@ -3591,17 +3591,17 @@ function SalesPanel({user,sv,logout,t,contacts=[],setContacts,fleet=[],orders=[]
         </div>
       </div>}
 
-      {tab==="account"&&<div className="cd" style={{padding:24,maxWidth:520}}>
+      {tab==="account"&&<div className="cd" style={{padding:24,maxWidth:720}}>
         <h3 style={{fontWeight:800,fontSize:18,color:"var(--navy)",marginBottom:4}}>My account</h3>
         <p style={{fontSize:13,color:"var(--g5)",marginBottom:18}}>Keep your contact details current and change your own password. Your role and commission policy are managed by the admin.</p>
-        <div style={{display:"grid",gap:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
           <div className="ig"><label>Display name</label><input className="inf" value={acc.name} onChange={e=>setAcc({...acc,name:e.target.value})}/></div>
-          <div className="ig"><label>Email (login)</label><input className="inf" value={user.email} disabled style={{background:"var(--g1)",color:"var(--g5)"}}/></div>
           <div className="ig"><label>Phone</label><input className="inf" value={acc.phone} onChange={e=>setAcc({...acc,phone:e.target.value})}/></div>
-          <div style={{borderTop:"1px solid var(--g2)",paddingTop:12,marginTop:4,fontWeight:700,fontSize:13,color:"var(--navy)"}}>Change password <span style={{fontWeight:400,fontSize:11,color:"var(--g4)"}}>(optional — leave blank to keep current)</span></div>
+          <div className="ig" style={{gridColumn:"1/3"}}><label>Email (login)</label><input className="inf" value={user.email} disabled style={{background:"var(--g1)",color:"var(--g5)"}}/></div>
+          <div style={{gridColumn:"1/3",borderTop:"1px solid var(--g2)",paddingTop:12,marginTop:4,fontWeight:700,fontSize:13,color:"var(--navy)"}}>Change password <span style={{fontWeight:400,fontSize:11,color:"var(--g4)"}}>(optional — leave blank to keep current)</span></div>
           <div className="ig"><label>New password</label><input className="inf" type="password" value={acc.pw} onChange={e=>setAcc({...acc,pw:e.target.value})}/></div>
           <div className="ig"><label>Confirm new password</label><input className="inf" type="password" value={acc.pw2} onChange={e=>setAcc({...acc,pw2:e.target.value})}/></div>
-          <button onClick={saveAccount} className="btn bp" style={{justifyContent:"center"}}>Save changes</button>
+          <button onClick={saveAccount} className="btn bp" style={{gridColumn:"1/3",justifyContent:"center"}}>Save changes</button>
         </div>
       </div>}
 
