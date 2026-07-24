@@ -2370,7 +2370,7 @@ function AnalyticsMod({orders=[],fleet=[],spaces=[],contacts=[],creditLines=[],b
   /* Revenue split: trucks vs storage spaces */
   const truckRev=live.filter(o=>!String(o.uid||"").startsWith("sp-")).reduce((s,o)=>s+(o.tp||0)+(o.dp||0),0);
   const spaceRev=Math.max(0,revenue-truckRev);
-  const splT=truckRev+spaceRev||1;const truckPct=Math.round(truckRev/splT*100),spacePct=100-truckPct;
+  const splT=truckRev+spaceRev;const truckPct=splT?Math.round(truckRev/splT*100):0,spacePct=splT?100-truckPct:0;
   /* Top items by revenue */
   const byVeh={};live.forEach(o=>{const k=o.un2||o.un||"Item";byVeh[k]=(byVeh[k]||0)+(o.tp||0)+(o.dp||0)});
   const topVeh=Object.entries(byVeh).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([label,value],i)=>({label,value,display:"$"+(value/1000).toFixed(1)+"k",color:["#2563eb","#10b981","#f59e0b","#8b5cf6","#ef4444"][i%5]}));
