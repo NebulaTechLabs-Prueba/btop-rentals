@@ -1992,8 +1992,8 @@ function PayMod({orders=[]}){
 /* ═══ INVOICES CRM ═══ */
 function InvoiceMod(){
   const [invoices,setInvoices]=useCollection("invoices",{pk:"id",keyCols:i=>({email:i.email}),seed:[]});
-  /* Global deposit-return policy (admin default). Each invoice may override via inv.depositReturn. */
-  const [depositPolicy,setDepositPolicy]=useState({mode:"percentage",value:100});
+  /* Global deposit-return policy (admin default) — persisted in Supabase. Each invoice may override via inv.depositReturn. */
+  const [depositPolicy,setDepositPolicy]=useSetting("invoice_deposit_policy",{mode:"percentage",value:100});
   const [subNav,setSubNav]=useState("board"); // board | history | config
   const [creating,setCreating]=useState(false);
   const [editInv,setEditInv]=useState(null);
@@ -2001,7 +2001,7 @@ function InvoiceMod(){
   const [delConfirm,setDelConfirm]=useState(null);
   const [viewMode,setViewMode]=useState("kanban");
   const [showCompleted,setShowCompleted]=useState(true);
-  const [pdfConfig,setPdfConfig]=useState({companyName:"BTOP Rentals",address:"9807 Mines Rd #9, Laredo TX 78045",phone:"+1 469 690 712",email:"btoprentals@gmail.com",footer:"Thank you for your business",color:"#1a365d"});
+  const [pdfConfig,setPdfConfig]=useSetting("invoice_pdf_config",{companyName:"BTOP Rentals",address:"9807 Mines Rd #9, Laredo TX 78045",phone:"+1 469 690 712",email:"btoprentals@gmail.com",footer:"Thank you for your business",color:"#1a365d"});
 
   const calcSub=(inv)=>inv.items.reduce((s,i)=>s+(i.qty||0)*(i.rate||0),0);
   const calcTotal=(inv)=>{const sub=calcSub(inv);const tax=sub*((inv.tax||0)/100);return(sub+tax)*(1-(inv.discount||0)/100)};
@@ -3738,10 +3738,10 @@ export default function App(){
   /* Sales "book on behalf of": the contact a salesperson is currently booking a full cart for (public catalog reused). null = normal shopping. */
   const [onBehalf,setOnBehalf]=useState(null);
   /* Alarm: plays a looping beep when a new reservation comes in, until admin opens Reservations */
-  const [alarmEnabled,setAlarmEnabled]=useState(true);
+  const [alarmEnabled,setAlarmEnabled]=useSetting("alarm_enabled",true);
   const [alarmActive,setAlarmActive]=useState(false);
-  /* Email template & log — sent to client when admin confirms a reservation */
-  const [emailTemplate,setEmailTemplate]=useState({
+  /* Email template & log — sent to client when admin confirms a reservation. Persisted in Supabase. */
+  const [emailTemplate,setEmailTemplate]=useSetting("confirmation_email_template",{
     subject:"Reservation Confirmed — {{invoice}}",
     greeting:"Hi {{client}},",
     body:"Great news! Your reservation has been confirmed. Below are the details for your records:\n\n• Invoice: {{invoice}}\n• Item: {{item}}\n• Dates: {{startDate}} to {{endDate}} ({{days}} days)\n• Total: {{total}}\n• Deposit Paid: {{deposit}}\n• Remaining at delivery: {{remaining}}\n\nPlease keep this email as proof of your booking. If you need to make changes, contact us before the start date.",
