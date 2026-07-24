@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, createContext, useContext } from "react";
 import { jsPDF } from "jspdf";
 import { usePersistentState, useRemoteState } from "./src/lib/persistence.js";
-import { loadFleetUnits, loadSpaces, loadProfiles } from "./src/lib/catalog.js";
+import { loadFleetUnits, loadSpaces, loadProfiles, syncFleetUnits, syncSpaces } from "./src/lib/catalog.js";
 import { supabase, isSupabaseConfigured } from "./src/lib/supabase.js";
 import { sendEmail } from "./src/lib/email.js";
 import { useCollection, useSetting, useEmailMap } from "./src/lib/collection.js";
@@ -5342,13 +5342,18 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
     if(alarmActive&&(section==="reservations"||section==="spaces"||section==="orderspay")&&setAlarmActive)setAlarmActive(false);
   },[section,alarmActive]);
   const [fleet,setFleetLocal]=useState(admSeedFleet);
+  /* Hidrata la flota admin desde Supabase (fuente de verdad), reemplazando el seed. */
+  useEffect(()=>{let off=false;const n=(v,d)=>v==null?(d??0):Number(v);loadFleetUnits().then(rows=>{if(off||!rows)return;setFleetLocal(rows.map(r=>{const s=r.specs||{};return{id:r.id,plate:r.plate,name:r.name,category:r.category,cat:r.category,year:r.year,make:r.make,model:r.model,status:r.status||"available",daily:n(r.daily),weekly:n(r.weekly),monthly:n(r.monthly),depD:n(r.deposit_daily,200),depW:n(r.deposit_weekly,300),depM:n(r.deposit_monthly,500),depositDaily:n(r.deposit_daily,200),depositWeekly:n(r.deposit_weekly,300),depositMonthly:n(r.deposit_monthly,500),rateMile:n(r.mile_daily),mileDaily:n(r.mile_daily),mileWeekly:n(r.mile_weekly),mileMonthly:n(r.mile_monthly),mileTiers:r.mile_tiers||[],fuelType:r.fuel_type,transmission:s.transmission||"",eqCapacity:s.eqCapacity||"",shortDesc:s.shortDesc||"",type:s.shortDesc||r.model,desc:s.shortDesc||"",img:catIcon(r.category)};}));}).catch(()=>{});return()=>{off=true};},[]);
   const setFleet=(updater)=>{
     setFleetLocal(prev=>{
       const next=typeof updater==="function"?updater(prev):updater;
       if(appSetFleet)appSetFleet(next.map(v=>({...v,id:v.id,img:catIcon(v.category),cat:v.category,type:v.shortDesc||v.model,year:v.year,name:v.name,daily:v.daily,weekly:v.weekly,monthly:v.monthly,rateMile:v.mileDaily||0,depD:v.depositDaily||200,depW:v.depositWeekly||300,depM:v.depositMonthly||500,desc:v.shortDesc})));
+      syncFleetUnits(prev,next); /* persiste ediciones (alta/edición/baja/precios) a Supabase */
       return next;
     });
   };
+  /* Persiste ediciones de espacios (campos propios) a Supabase; las rentas viven aparte. */
+  const setSpacesPersist=(updater)=>{setSpaces(prev=>{const next=typeof updater==="function"?updater(prev):updater;syncSpaces(prev,next);return next;});};
   const [users,setUsers]=useState([]);
   const [roles,setRoles]=useState(admSeedRoles);
   /* Lista de STAFF desde Supabase (profiles). Los clientes se gestionan en Contacts, no aquí. */
@@ -5446,7 +5451,7 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
           {section==="fleet"&&<FleetMod fleet={fleet} setFleet={setFleet} bookings={bookings} orders={orders}/>}
           {section==="detfleet"&&<DetailedFleetMod fleet={fleet} bookings={bookings} setFleet={setFleet}/>}
           {section==="maintenance"&&<MaintenanceMod fleet={fleet} spaces={spaces} bookings={bookings} setBookings={setBookings} onViewUnit={(vid)=>{setSection("detfleet")}}/>}
-          {section==="spaces"&&<SpacesMod spaces={spaces} setSpaces={setSpaces}/>}
+          {section==="spaces"&&<SpacesMod spaces={spaces} setSpaces={setSpacesPersist}/>}
           {section==="bookings"&&<BookingsMod orders={orders}/>}
           {section==="reservations"&&<ReservationsMod orders={orders} setOrders={setOrders} fleetBookings={bookings} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars} authUsers={authUsers}/>}
           {section==="settlement"&&<SettlementMod orders={orders} setOrders={setOrders} deliveries={deliveries} fleet={fleet}/>}
