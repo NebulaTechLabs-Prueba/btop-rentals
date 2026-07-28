@@ -656,8 +656,8 @@ function DetailedFleetMod({fleet,bookings=[],setFleet}){
         </div>
       </SC>}
 
-      <div className="flex gap-6">
-        <div className={`${sel?"w-3/5":"flex-1"} transition-all`}>
+      <div className="flex flex-col lg:flex-row gap-6">
+        <div className={`${sel?"w-full lg:w-3/5":"flex-1"} transition-all`}>
           <SC title={`All Units (${fleet.length})`} padded={false}>
             <DT headers={["Unit Code","Vehicle","Category","Plate","Status","Bookings",""]} rows={fleet.map(v=>{
               const active=getNow(v);const bks=getBookings(v);
@@ -674,7 +674,7 @@ function DetailedFleetMod({fleet,bookings=[],setFleet}){
           </SC>
         </div>
 
-        {sel&&<div className="w-2/5 min-w-[340px] sticky top-24 h-fit">
+        {sel&&<div className="w-full lg:w-2/5 lg:min-w-[340px] lg:sticky lg:top-24 h-fit">
           <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 bg-stone-50">
               <div><span className="font-mono font-bold text-blue-700">{getUnitCode(sel)}</span> <span className="text-sm font-semibold ml-2">{sel.year} {sel.name}</span></div>
@@ -1152,8 +1152,8 @@ function ReservationsMod({orders,setOrders,fleetBookings=[],emailTemplate,setEma
     <div className="flex gap-2 mb-4 flex-wrap">{["all","Reserved","Confirmed","Active","Completed","Cancelled"].map(f=><button key={f} onClick={()=>setFilter(f)} className={`px-4 py-2 rounded-full text-sm font-medium ${filter===f?(f==="Cancelled"?"bg-red-600 text-white":"bg-blue-900 text-white"):"bg-white border border-stone-200"}`}>{f==="all"?"All":f} {f!=="all"?reservations.filter(o=>o.status===f).length:reservations.length}</button>)}</div>
     </>}
 
-    {view==="active"&&<div className="flex gap-6">
-      <div className={`${sel?"w-3/5":"flex-1"} transition-all`}>
+    {view==="active"&&<div className="flex flex-col lg:flex-row gap-6">
+      <div className={`${sel?"w-full lg:w-3/5":"flex-1"} transition-all`}>
         <SC title={`Reservations (${filtered.length})`} padded={false}>
           {filtered.length===0?<div className="text-center py-16 text-stone-400"><Calendar className="w-8 h-8 mx-auto mb-2"/><p>No reservations</p></div>
           :<DT headers={["Invoice","Client","Item","Dates","Deposit Paid","Status",""]} rows={filtered.map(o=>[
@@ -1167,7 +1167,7 @@ function ReservationsMod({orders,setOrders,fleetBookings=[],emailTemplate,setEma
           ])}/>}
         </SC>
       </div>
-      {sel&&<div className="w-2/5 min-w-[340px] sticky top-24 h-fit">
+      {sel&&<div className="w-full lg:w-2/5 lg:min-w-[340px] lg:sticky lg:top-24 h-fit">
         <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 bg-blue-50">
             <div><span className="font-mono font-bold text-blue-700">{sel.invNum||sel.oid}</span><span className="ml-2 text-sm text-stone-500">{sel.od}</span></div>
@@ -1453,7 +1453,7 @@ function SettlementMod({orders,setOrders,deliveries,fleet=[]}){
       }}/>
     </div>
 
-    <div className="flex gap-6">
+    <div className="flex flex-col lg:flex-row gap-6">
       <div className={`${sel?"w-1/2":"flex-1"} transition-all`}>
         {/* PENDING */}
         <SC title={`Pending Settlement (${pending.length})`} padded={false}>
@@ -1909,8 +1909,8 @@ function MessagesMod({messages,setMessages}){
   const {slice,Pager}=usePagination(messages,5);
 
   return (
-    <div className="flex gap-6">
-      <div className={`${selected?"w-3/5":"flex-1"} transition-all`}>
+    <div className="flex flex-col lg:flex-row gap-6">
+      <div className={`${selected?"w-full lg:w-3/5":"flex-1"} transition-all`}>
         <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
           <div><p className="text-stone-600">Messages received from the Contact Us form on your website.</p></div>
           <div className="flex items-center gap-2">{unread>0&&<button onClick={markAllRead} className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-stone-200 rounded-full text-sm hover:bg-stone-50"><Check className="w-4 h-4"/>Mark all read</button>}</div>
@@ -1955,7 +1955,7 @@ function MessagesMod({messages,setMessages}){
       </div>
 
       {/* DETAIL PANEL */}
-      {selected&&<div className="w-2/5 min-w-[320px] sticky top-24 h-fit">
+      {selected&&<div className="w-full lg:w-2/5 lg:min-w-[320px] lg:sticky lg:top-24 h-fit">
         <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 bg-stone-50">
             <div className="flex items-center gap-2"><span className="font-semibold text-sm">{selected.name}</span><Pill tone={selected.type==="Truck Rental Quote"?"blue":selected.type==="Storage Space"?"amber":"stone"}>{selected.type}</Pill></div>
@@ -2114,7 +2114,7 @@ function InvoiceMod(){
       </div>
 
       {/* ══════ BOARD ══════ */}
-      {subNav==="board"&&<div className="flex gap-6">
+      {subNav==="board"&&<div className="flex flex-col lg:flex-row gap-6">
         <div className={`${viewInv?"w-2/3":"flex-1"} transition-all`}>
           <div className="flex items-start justify-between gap-4 mb-6 flex-wrap"><p className="text-stone-600">Invoice pipeline — manage your billing workflow.</p>
             <div className="flex items-center gap-2">
@@ -3206,8 +3206,8 @@ function CartsMod({carts,setCarts,contacts=[]}){
       {q&&<button onClick={()=>setQ("")} className="px-3 py-2 border border-stone-200 rounded-lg text-xs font-semibold text-stone-600">✕ Clear</button>}
       <span className="text-xs text-stone-500 ml-auto">{filtered.length} of {live.length}</span>
     </div>
-    <div className="flex gap-6">
-      <div className={`${sel?"w-3/5":"flex-1"} transition-all`}>
+    <div className="flex flex-col lg:flex-row gap-6">
+      <div className={`${sel?"w-full lg:w-3/5":"flex-1"} transition-all`}>
         <SC title={`Carts (${filtered.length})`} padded={false}>
           {filtered.length===0?<div className="text-center py-16 text-stone-400"><Package className="w-8 h-8 mx-auto mb-2"/><p>No carts registered</p><p className="text-[11px] mt-1">Carts are created when a visitor adds equipment to their cart.</p></div>
           :<DT headers={["Code","Who","Items","Total","Updated","Status",""]} rows={filtered.map(c=>[
@@ -3221,7 +3221,7 @@ function CartsMod({carts,setCarts,contacts=[]}){
           ])}/>}
         </SC>
       </div>
-      {sel&&<div className="w-2/5 min-w-[320px] sticky top-24 h-fit">
+      {sel&&<div className="w-full lg:w-2/5 lg:min-w-[320px] lg:sticky lg:top-24 h-fit">
         <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 bg-blue-50">
             <span className="font-mono font-bold text-blue-700">{sel.code}</span>
@@ -3321,8 +3321,8 @@ function OrdersPayMod({orders,setOrders,approveOrder,rejectOrder,authUsers=[]}){
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 Search by order number (ORD-...), invoice, customer..." className="flex-1 min-w-[240px] px-3 py-2 border border-stone-200 rounded-lg text-sm font-mono"/>
       {q&&<button onClick={()=>setQ("")} className="px-3 py-2 border border-stone-200 rounded-lg text-xs font-semibold text-stone-600">✕</button>}
     </div>
-    <div className="flex gap-6">
-      <div className={`${sel?"w-3/5":"flex-1"} transition-all`}>
+    <div className="flex flex-col lg:flex-row gap-6">
+      <div className={`${sel?"w-full lg:w-3/5":"flex-1"} transition-all`}>
         <SC title={`Orders (${filtered.length})`} padded={false}>
           {filtered.length===0?<div className="text-center py-16 text-stone-400"><FileText className="w-8 h-8 mx-auto mb-2"/><p>No orders</p></div>
           :<DT headers={["Order #","Customer","Method","Payment","Status","Expires",""]} rows={filtered.map(o=>{
@@ -3338,7 +3338,7 @@ function OrdersPayMod({orders,setOrders,approveOrder,rejectOrder,authUsers=[]}){
           ]})}/>}
         </SC>
       </div>
-      {sel&&(()=>{const o=orders.find(x=>x.oid===sel.oid)||sel;const dl=o.status==="Pending"?daysLeft(o.expiresAt):null;return <div className="w-2/5 min-w-[340px] sticky top-24 h-fit">
+      {sel&&(()=>{const o=orders.find(x=>x.oid===sel.oid)||sel;const dl=o.status==="Pending"?daysLeft(o.expiresAt):null;return <div className="w-full lg:w-2/5 lg:min-w-[340px] lg:sticky lg:top-24 h-fit">
         <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 bg-blue-50">
             <span className="font-mono font-bold text-blue-700">{o.oid}</span>
@@ -4242,7 +4242,7 @@ export default function App(){
 
   const css=`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Space+Mono:wght@400;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}:root{--navy:#0A1628;--b9:#0B2545;--b8:#13315C;--b7:#134074;--b6:#1B4DDB;--b5:#2563EB;--b4:#3B82F6;--b3:#60A5FA;--b2:#93C5FD;--b1:#DBEAFE;--b0:#EFF6FF;--g9:#111827;--g7:#374151;--g5:#6B7280;--g3:#D1D5DB;--g2:#E5E7EB;--g1:#F3F4F6;--g0:#F9FAFB;--w:#FFF;--green:#059669;--red:#DC2626;--orange:#F59E0B;--f:'DM Sans',sans-serif;--fm:'Space Mono',monospace;--sh:0 4px 16px rgba(11,37,69,.10);--r:12px;--rL:20px}
-body{font-family:var(--f);background:var(--g0);color:var(--g9)}input,select,textarea,button{font-family:var(--f)}
+html,body{overflow-x:hidden;max-width:100%}body{font-family:var(--f);background:var(--g0);color:var(--g9)}input,select,textarea,button{font-family:var(--f)}img{max-width:100%;height:auto}
 .fi{animation:fi .5s ease}@keyframes fi{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes su{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}@keyframes fl{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}@keyframes scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}.tscroll{animation:scroll 25s linear infinite}.tscroll:hover{animation-play-state:paused}
 .tst{position:fixed;top:24px;right:24px;z-index:9999;padding:16px 28px;border-radius:var(--r);color:#fff;font-weight:600;font-size:14px;animation:su .3s ease;box-shadow:0 12px 40px rgba(11,37,69,.15)}
 .ts{background:var(--green)}.te{background:var(--red)}
@@ -4250,11 +4250,13 @@ body{font-family:var(--f);background:var(--g0);color:var(--g9)}input,select,text
 .bp{background:var(--b6);color:#fff}.bp:hover{background:var(--b5)}.bs{background:var(--w);color:var(--b8);border:2px solid var(--b1)}.bs:hover{border-color:var(--b5);background:var(--b0)}
 .bsm{padding:8px 18px;font-size:13px}.blg{padding:16px 36px;font-size:17px}
 .ig{display:flex;flex-direction:column;gap:6px}.ig label{font-weight:600;font-size:12px;color:var(--g7);text-transform:uppercase;letter-spacing:.5px}
-.inf{padding:12px 16px;border:2px solid var(--g2);border-radius:var(--r);font-size:15px;transition:all .2s;background:#fff;width:100%}.inf:focus{outline:none;border-color:var(--b5);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.inf{padding:12px 16px;border:2px solid var(--g2);border-radius:var(--r);font-size:16px;transition:all .2s;background:#fff;width:100%}.inf:focus{outline:none;border-color:var(--b5);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
 .cd{background:#fff;border-radius:var(--rL);box-shadow:0 1px 2px rgba(0,0,0,.06);border:1px solid var(--g2);overflow:hidden;transition:all .3s}.cd:hover{box-shadow:var(--sh);transform:translateY(-4px)}
 .bd{display:inline-flex;align-items:center;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}.bb{background:var(--b1);color:var(--b7)}.bg{background:#D1FAE5;color:#065F46}
 .st{font-size:clamp(28px,4vw,42px);font-weight:800;color:var(--navy);line-height:1.15;letter-spacing:-.5px}.ss{font-size:17px;color:var(--g5);max-width:600px;line-height:1.6}
 @media(max-width:768px){.hm{display:none!important}.mf{grid-template-columns:1fr!important}
+  input,select,textarea{font-size:16px!important}
+  .blg{padding:14px 24px!important;font-size:15px!important}.btn{padding:11px 20px}
   .admin-sidebar{position:fixed!important;left:-270px;top:0;bottom:0;width:256px;z-index:120;transition:left .25s ease}
   .admin-sidebar.open{left:0;box-shadow:0 0 30px rgba(0,0,0,.3)}
   .admin-topbar-burger{display:inline-flex!important}
@@ -4713,7 +4715,7 @@ function Home({fleet,sv,ac,t,bookings=[],cart=[],orders=[],spaces:propSpaces}){
     {/* FLEET */}
     <section style={{padding:"0 24px 100px"}}><div style={{maxWidth:1280,margin:"0 auto"}}>
       <div style={{textAlign:"center",marginBottom:60}}><div className="bd bb" style={{marginBottom:16}}>Our Fleet</div><h2 className="st">Trucks & Equipment Ready to Rent</h2></div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:24}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(100%,320px),1fr))",gap:24}}>
         {groupByModel(fleet).map(g=>{const u=g.sample;const total=g.units.length;const freeNow=availableToday(g.units,bookings,cart,orders).length;return <div key={g.key} className="cd" style={{display:"flex",flexDirection:"column"}}>
           <div style={{background:"linear-gradient(135deg,var(--b0),var(--b1))",padding:32,textAlign:"center",position:"relative"}}><div className="bd bb" style={{position:"absolute",top:16,left:16}}>{u.cat}</div>{total>1&&<div style={{position:"absolute",top:16,right:16,fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:12,background:freeNow===0?"#FEE2E2":"#D1FAE5",color:freeNow===0?"#991B1B":"#065F46"}}>{freeNow}/{total} available</div>}<div style={{fontSize:64}}>{u.img}</div></div>
           <div style={{padding:24,flex:1,display:"flex",flexDirection:"column"}}>
@@ -4863,7 +4865,7 @@ function Fl({fleet,sv,ac,bookings=[],setCartOpen,t,cart=[],orders=[]}){const [f,
   return <div className="fi" style={{padding:"60px 24px 100px"}}><div style={{maxWidth:1280,margin:"0 auto"}}>
     <div style={{textAlign:"center",marginBottom:48}}><h1 className="st">Our Fleet</h1></div>
     <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:40,flexWrap:"wrap"}}>{cs.map(c=><button key={c} onClick={()=>sf(c)} className="btn bsm" style={{background:f===c?"var(--b6)":"#fff",color:f===c?"#fff":"var(--g7)",border:f===c?"none":"1px solid var(--g3)"}}>{c}</button>)}</div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:24}}>{groupByModel(ls).map(g=>{const u=g.sample;const total=g.units.length;const freeNow=availableToday(g.units,bookings,cart,orders).length;const dotColor=freeNow===0?"#DC2626":freeNow<total?"#F59E0B":"#10b981";return <div key={g.key} className="cd">
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(100%,300px),1fr))",gap:24}}>{groupByModel(ls).map(g=>{const u=g.sample;const total=g.units.length;const freeNow=availableToday(g.units,bookings,cart,orders).length;const dotColor=freeNow===0?"#DC2626":freeNow<total?"#F59E0B":"#10b981";return <div key={g.key} className="cd">
       <div style={{background:"linear-gradient(135deg,var(--b0),var(--b1))",padding:28,textAlign:"center",position:"relative"}}>
         <div style={{position:"absolute",top:12,right:12,display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:12,background:freeNow===0?"#FEE2E2":freeNow<total?"#FEF3C7":"#D1FAE5",color:freeNow===0?"#991B1B":freeNow<total?"#92400E":"#065F46"}}><span style={{width:6,height:6,borderRadius:3,background:dotColor}}/>{freeNow}/{total} available</div>
         <div style={{fontSize:56}}>{u.img}</div>
@@ -5847,7 +5849,7 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout,creditLine,orders_all
       {tab==="docs"&&<div>
         <h2 style={{fontWeight:800,fontSize:20,color:"var(--navy)",marginBottom:6}}>Documents</h2>
         <p style={{fontSize:13,color:"var(--g5)",marginBottom:20}}>Upload your verification documents. BTOP staff can view and download these to process your rentals.</p>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(100%,280px),1fr))",gap:16}}>
           {[["Driver's License","Required for rental contracts","license"],["Insurance Certificate","Your own insurance (if applicable)","insurance"],["Other / Business Docs","EIN letter, W-9, etc.","other"]].map(([title,d,k])=>{
             const mine=clientDocs.filter(x=>x.category===k);
             const onPick=(e)=>{const f=e.target.files&&e.target.files[0];if(!f||!addClientDoc)return;const base={id:"doc-"+Date.now(),name:f.name,category:k,size:f.size,uploadedAt:new Date().toISOString()};
@@ -6187,7 +6189,7 @@ function CalendarPage({fleet,bookings=[],spaces=[]}){
             <button onClick={()=>setActiveVehicles(new Set())} style={{fontSize:12,color:"var(--red)",background:noneVOn?"#FEE2E2":"none",border:noneVOn?"1px solid #FCA5A5":"none",borderRadius:8,padding:"4px 12px",cursor:"pointer",fontWeight:600}}>Deselect All</button>
           </div>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(100%,320px),1fr))",gap:12}}>
           {fleet.map(v=>{const st=getStatusV(v);const on=activeVehicles.has(v.id);
             return <button key={v.id} onClick={()=>toggleV(v.id)} style={{background:on?"#fff":"var(--g0)",borderRadius:14,border:on?"2px solid var(--b4)":"2px solid transparent",padding:16,display:"flex",gap:14,alignItems:"center",cursor:"pointer",opacity:on?1:.5,transition:"all .2s",textAlign:"left"}}>
               <div style={{position:"relative",flexShrink:0}}><div style={{width:44,height:44,borderRadius:12,background:"var(--b0)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>{v.img||"🚛"}</div><div style={{position:"absolute",bottom:-2,right:-2,width:12,height:12,borderRadius:"50%",background:st.color,border:"2px solid #fff"}}/></div>
@@ -6213,7 +6215,7 @@ function CalendarPage({fleet,bookings=[],spaces=[]}){
             <button onClick={()=>setActiveSpaces(new Set())} style={{fontSize:12,color:"var(--red)",background:noneSOn?"#FEE2E2":"none",border:noneSOn?"1px solid #FCA5A5":"none",borderRadius:8,padding:"4px 12px",cursor:"pointer",fontWeight:600}}>Deselect All</button>
           </div>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(100%,320px),1fr))",gap:12}}>
           {spaces.map(s=>{const st=getStatusS(s);const on=activeSpaces.has(s.id);const icons={Outdoor:"☀️",Indoor:"🏢","High-Security":"🔒",Refrigerated:"❄️"};
             return <button key={s.id} onClick={()=>toggleS(s.id)} style={{background:on?"#fff":"var(--g0)",borderRadius:14,border:on?"2px solid var(--b4)":"2px solid transparent",padding:16,display:"flex",gap:14,alignItems:"center",cursor:"pointer",opacity:on?1:.5,transition:"all .2s",textAlign:"left"}}>
               <div style={{position:"relative",flexShrink:0}}><div style={{width:44,height:44,borderRadius:12,background:s.type==="Refrigerated"?"#ECFEFF":s.type==="Indoor"?"#EFF6FF":"#FEF9C3",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>{icons[s.type]||"📦"}</div><div style={{position:"absolute",bottom:-2,right:-2,width:12,height:12,borderRadius:"50%",background:st.color,border:"2px solid #fff"}}/></div>
@@ -6335,7 +6337,7 @@ function StoragePage({sv,ac,setCartOpen,spaces:propSpaces,cart=[]}){
     <section style={{padding:"48px 24px 80px"}}>
       <div style={{maxWidth:1100,margin:"0 auto"}}>
         {filtered.length===0?<div style={{textAlign:"center",padding:"80px 0",color:"var(--g5)"}}><span style={{fontSize:48}}>📦</span><h3 style={{fontWeight:700,color:"var(--navy)",marginTop:16}}>No spaces match your filters</h3><p style={{marginTop:8}}>Try adjusting your filters above.</p></div>
-        :<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:24}}>
+        :<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(100%,320px),1fr))",gap:24}}>
           {filtered.map(s=>{
             const isAvail=s.status==="available";
             return <div key={s.id} onClick={()=>setSel(s)} style={{background:"#fff",borderRadius:20,border:isAvail?"2px solid var(--b4)":"1px solid var(--g2)",overflow:"hidden",cursor:"pointer",transition:"all .3s",boxShadow:"0 2px 12px rgba(0,0,0,.04)"}} >
@@ -6480,7 +6482,7 @@ function StoragePage({sv,ac,setCartOpen,spaces:propSpaces,cart=[]}){
     <section style={{padding:"60px 24px",background:"#fff"}}>
       <div style={{maxWidth:1100,margin:"0 auto"}}>
         <div style={{textAlign:"center",marginBottom:40}}><div className="bd bb" style={{marginBottom:12}}>Our Services</div><h2 className="st">Logistics & Distribution</h2></div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:20}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(100%,320px),1fr))",gap:20}}>
           {[
             {icon:"🔄",title:"Distribution Management",desc:"We handle the entire cycle — from order processing to final delivery at your customer's door. Leave the complexity of logistics in our hands.",tag:"Full-Service"},
             {icon:"🚛",title:"Local Pick Up / Delivery",desc:"Agile and reliable transportation for pickup and delivery within the Laredo area. Products arrive on time and securely.",tag:"Same-Day"},
@@ -6756,8 +6758,8 @@ function HQMod({deliveries,setDeliveries,bookings,setBookings}){
   const uDel=(id,k,v)=>{setDeliveries(p=>p.map(x=>x.id===id?{...x,[k]:v}:x));if(sel?.id===id)setSel(p=>({...p,[k]:v}))};
 
   return (
-    <div className="flex gap-6">
-      <div className={`${sel?"w-3/5":"flex-1"} transition-all`}>
+    <div className="flex flex-col lg:flex-row gap-6">
+      <div className={`${sel?"w-full lg:w-3/5":"flex-1"} transition-all`}>
         <div className="flex items-start justify-between gap-4 mb-6 flex-wrap"><div><p className="text-stone-600">Vehicle delivery and return tracking. Record condition at pickup and dropoff.</p></div></div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mb-6">
           <St label="Pending Pickup" value={deliveries.filter(d=>d.status==="pending").length} delta="awaiting delivery" icon={Clock} breakdown={{
@@ -6792,7 +6794,7 @@ function HQMod({deliveries,setDeliveries,bookings,setBookings}){
         </SC>
       </div>
 
-      {sel&&<div className="w-2/5 min-w-[340px] sticky top-24 h-fit">
+      {sel&&<div className="w-full lg:w-2/5 lg:min-w-[340px] lg:sticky lg:top-24 h-fit">
         <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 bg-stone-50">
             <div><span className="font-mono font-semibold">{sel.oid}</span> <Pill tone={sel.status==="pending"?"amber":sel.status==="delivered"?"blue":"emerald"}>{sel.status}</Pill></div>
@@ -7027,7 +7029,7 @@ function FieldHQ({fleet,spaces,deliveries,setDeliveries,bookings=[],setBookings,
 
           {/* ALL FLEET STATUS */}
           <div style={{marginTop:32}}><h3 style={{fontWeight:700,fontSize:16,color:"var(--navy)",marginBottom:12}}>Fleet Overview</h3>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(100%,280px),1fr))",gap:12}}>
               {fleet.map(v=>{
                 const now=new Date().toISOString().split("T")[0];
                 const maint=bookings.find(b=>b.vid===v.id&&b.type==="maintenance"&&b.start<=now&&b.end>=now);
