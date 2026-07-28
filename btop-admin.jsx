@@ -3766,10 +3766,20 @@ function CommissionsMod({orders=[],users=[],commissionPolicy,setCommissionPolicy
 }
 
 /* ═══ MAGIC-LINK INVITE — client activates their own account by setting a password (one-time) ═══ */
-function InvitePage({invite,onAccept,sv}){
+function InvitePage({token,invite,onAccept,sv}){
   const [pw,setPw]=useState("");const [pw2,setPw2]=useState("");const [err,setErr]=useState("");
-  const valid=invite&&invite.status==="active";
-  const go=()=>{if(pw.length<8){setErr("Password must be at least 8 characters");return}if(pw!==pw2){setErr("Passwords do not match");return}setErr("");onAccept(pw)};
+  const [inv,setInv]=useState(invite||null);
+  const [loading,setLoading]=useState(!!(isSupabaseConfigured&&supabase&&token));
+  const [busy,setBusy]=useState(false);
+  /* Obtiene la invitación por token desde Supabase (funciona cross-device; el prop local es fallback dev) */
+  useEffect(()=>{
+    if(isSupabaseConfigured&&supabase&&token){
+      supabase.rpc("get_invite",{p_token:token}).then(({data})=>{const r=Array.isArray(data)?data[0]:data;if(r&&r.email)setInv(r);setLoading(false);}).catch(()=>setLoading(false));
+    }
+  },[token]);
+  const valid=!!(inv&&inv.email);
+  const go=async()=>{if(pw.length<8){setErr("Password must be at least 8 characters");return}if(pw!==pw2){setErr("Passwords do not match");return}setErr("");setBusy(true);try{await onAccept(pw);}finally{setBusy(false);}};
+  if(loading)return <div className="fi" style={{minHeight:"80vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}><div style={{color:"var(--g5)"}}>Loading invite…</div></div>;
   return <div className="fi" style={{minHeight:"80vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"linear-gradient(135deg,var(--b0),var(--g0))"}}>
     <div className="cd" style={{maxWidth:440,width:"100%",padding:40}}>
       {!valid?<div style={{textAlign:"center"}}>
@@ -3778,12 +3788,12 @@ function InvitePage({invite,onAccept,sv}){
         <p style={{color:"var(--g5)",fontSize:14,marginBottom:20}}>This is a one-time link and it has already been used or expired. Please ask BTOP to send you a new invite.</p>
         <button onClick={()=>sv("home")} className="btn bp">Go to homepage</button>
       </div>:<div>
-        <div style={{textAlign:"center",marginBottom:24}}><div style={{width:60,height:60,borderRadius:16,background:"linear-gradient(135deg,var(--b6),var(--b4))",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><X n="lock" s={28} c="#fff"/></div><h2 style={{fontSize:22,fontWeight:800,color:"var(--navy)"}}>Set your password</h2><p style={{fontSize:13,color:"var(--g5)",marginTop:6}}>Welcome, {invite.name}. Create a password to activate your BTOP account for <strong>{invite.email}</strong>.</p></div>
+        <div style={{textAlign:"center",marginBottom:24}}><div style={{width:60,height:60,borderRadius:16,background:"linear-gradient(135deg,var(--b6),var(--b4))",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><X n="lock" s={28} c="#fff"/></div><h2 style={{fontSize:22,fontWeight:800,color:"var(--navy)"}}>Set your password</h2><p style={{fontSize:13,color:"var(--g5)",marginTop:6}}>Welcome, {inv.name||""}. Create a password to activate your BTOP account for <strong>{inv.email}</strong>.</p></div>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <div className="ig"><label>New password</label><input className="inf" type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Min 8 characters"/></div>
           <div className="ig"><label>Confirm password</label><input className="inf" type="password" value={pw2} onChange={e=>setPw2(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}/></div>
           {err&&<div style={{padding:"10px 14px",borderRadius:10,fontSize:13,fontWeight:600,background:"rgba(220,38,38,.1)",color:"var(--red)"}}>{err}</div>}
-          <button onClick={go} className="btn bp blg" style={{width:"100%",justifyContent:"center"}}>Create account &amp; sign in</button>
+          <button onClick={go} disabled={busy} className="btn bp blg" style={{width:"100%",justifyContent:"center",opacity:busy?.6:1}}>{busy?"Creating…":"Create account & sign in"}</button>
           <p style={{fontSize:11,color:"var(--g5)",textAlign:"center"}}>This is a one-time link — after you set your password it becomes invalid.</p>
         </div>
       </div>}
@@ -4055,12 +4065,28 @@ export default function App(){
     if(users.find(u=>u.email===contact.email)){t("This contact already has an account","error");return}
     const token=genCode("INV")+genCode("").slice(0,4);
     setInvites(p=>[{token,email:contact.email,name:contact.name,phone:contact.phone||"",createdAt:nowISO(),status:"active",invitedBy:user?.email||"admin"},...p.filter(i=>!(i.email===contact.email&&i.status==="active"))]);
+    /* Persiste en Supabase para que el invitado valide su token cross-device (el localStorage anterior no servía) */
+    if(isSupabaseConfigured&&supabase)supabase.from("invites").upsert({token,email:contact.email,name:contact.name,phone:contact.phone||"",role:"client",status:"active",invited_by:user?.email||"admin"}).then(({error})=>{if(error)console.warn("[invite]",error.message)});
     const url=`${location.origin}${location.pathname}?invite=${token}`;
     setMagicLink({email:contact.email,name:contact.name,url});
     t(`One-time account invite generated for ${contact.email}`,"success");
   };
   /* Client uses the magic link → sets a password → account is created, contact marked as account-holder, token invalidated */
-  const acceptInvite=(token,password)=>{
+  const acceptInvite=async(token,password)=>{
+    /* Producción (Supabase): valida el token por RPC y crea una cuenta REAL en Supabase Auth. */
+    if(isSupabaseConfigured&&supabase){
+      const {data,error}=await supabase.rpc("get_invite",{p_token:token});
+      const inv=Array.isArray(data)?data[0]:data;
+      if(error||!inv||!inv.email){t("This invite link is invalid or already used. Please request a new one.","error");return false}
+      const {data:su,error:se}=await supabase.auth.signUp({email:inv.email,password,options:{data:{name:inv.name||""}}});
+      if(se){t(se.message||"Could not create the account","error");return false}
+      await supabase.rpc("consume_invite",{p_token:token}).catch(()=>{});
+      /* Registra el contacto como titular de cuenta (best-effort) */
+      setContacts(p=>{const ex=p.find(c=>(c.email||"").toLowerCase()===inv.email.toLowerCase());if(ex)return p.map(c=>c===ex?{...c,hasAccount:true,phone:c.phone||inv.phone}:c);return[{id:nid(),name:inv.name,email:inv.email,phone:inv.phone||"",city:"",company:"",idDoc:"",registered:new Date().toISOString().split("T")[0],lastOrder:"",totalSpent:0,orders:0,hasAccount:true},...p]});
+      if(su?.session){t("Account created! You're signed in.","success");return true;} /* onAuthStateChange fija el user */
+      t("Account created. Please confirm via the email we sent, then sign in.","success");setView("login");return false;
+    }
+    /* Fallback dev (sin Supabase): flujo local con localStorage */
     const inv=invites.find(i=>i.token===token&&i.status==="active");
     if(!inv){t("This invite link is invalid or already used. Please request a new one.","error");return false}
     if(users.find(u=>u.email===inv.email)){setInvites(p=>p.map(i=>i.token===token?{...i,status:"used"}:i));t("Account already exists — please sign in.","error");return false}
@@ -4345,7 +4371,7 @@ html,body{overflow-x:hidden;max-width:100%}body{font-family:var(--f);background:
         <button onClick={()=>setCartOpen(true)} style={{background:"#fff",color:"#1E3A5F",border:"none",borderRadius:20,padding:"6px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}>Open cart ({cart.length})</button>
         <button onClick={()=>{setOnBehalf(null);setView("sales")}} style={{background:"rgba(255,255,255,.12)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:20,padding:"6px 14px",fontWeight:600,fontSize:12,cursor:"pointer"}}>Cancel</button>
       </div>}
-      {view==="invite"&&<InvitePage invite={invites.find(i=>i.token===inviteToken)} onAccept={(pw)=>{if(acceptInvite(inviteToken,pw))setView("client")}} sv={setView}/>}
+      {view==="invite"&&<InvitePage token={inviteToken} invite={invites.find(i=>i.token===inviteToken)} onAccept={async(pw)=>{const ok=await acceptInvite(inviteToken,pw);if(ok)setView("client");}} sv={setView}/>}
       {view==="checkout"&&user&&<CheckoutPage cart={cart} rmCart={rmCart} cTotal={cTotal} user={user} confirm={confirmOrder} cancel={()=>setView("home")} sv={setView} company={company} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} creditUsed={orders.filter(o=>(o.payMethod==="credit"||o.payMethod==="invoice")&&o.ue===user.email&&o.status!=="Cancelled"&&!o.settlementPaid).reduce((s,o)=>s+(o.tp||0),0)} savedPays={savedPays} mySignature={mySignature} saveMySignature={saveMySignature}/>}
       {view==="client"&&user?.role==="client"&&<Cl orders={orders.filter(o=>o.ue===user.email)} sv={setView} user={user} contacts={contacts} setContacts={setContacts} logout={logout} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} orders_all={orders} savedPays={savedPays} setSavedPays={setSavedPays} t={t} clientDocs={clientDocs} addClientDoc={addClientDoc} removeClientDoc={removeClientDoc} depositReturnPref={depositReturnPref} setDepositReturnPref={setDepositReturnPref} mySignature={mySignature} saveMySignature={saveMySignature} clientProfile={clientProfile} saveClientProfile={saveClientProfile}/>}
     </main>
