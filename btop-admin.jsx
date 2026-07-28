@@ -4080,10 +4080,13 @@ export default function App(){
       if(error||!inv||!inv.email){t("This invite link is invalid or already used. Please request a new one.","error");return false}
       const {data:su,error:se}=await supabase.auth.signUp({email:inv.email,password,options:{data:{name:inv.name||""}}});
       if(se){t(se.message||"Could not create the account","error");return false}
-      await supabase.rpc("consume_invite",{p_token:token}).catch(()=>{});
-      /* Registra el contacto como titular de cuenta (best-effort) */
-      setContacts(p=>{const ex=p.find(c=>(c.email||"").toLowerCase()===inv.email.toLowerCase());if(ex)return p.map(c=>c===ex?{...c,hasAccount:true,phone:c.phone||inv.phone}:c);return[{id:nid(),name:inv.name,email:inv.email,phone:inv.phone||"",city:"",company:"",idDoc:"",registered:new Date().toISOString().split("T")[0],lastOrder:"",totalSpent:0,orders:0,hasAccount:true},...p]});
-      if(su?.session){t("Account created! You're signed in.","success");return true;} /* onAuthStateChange fija el user */
+      try{await supabase.rpc("consume_invite",{p_token:token});}catch(e){/* best-effort */}
+      if(su?.session){
+        /* Con sesión (sin confirmación de email): marca el contacto como titular (write RLS-permitido) */
+        setContacts(p=>{const ex=p.find(c=>(c.email||"").toLowerCase()===inv.email.toLowerCase());if(ex)return p.map(c=>c===ex?{...c,hasAccount:true,phone:c.phone||inv.phone}:c);return[{id:nid(),name:inv.name,email:inv.email,phone:inv.phone||"",city:"",company:"",idDoc:"",registered:new Date().toISOString().split("T")[0],lastOrder:"",totalSpent:0,orders:0,hasAccount:true},...p]});
+        t("Account created! You're signed in.","success");return true; /* onAuthStateChange fija el user */
+      }
+      /* Confirmación de email pendiente: no escribimos aún (sin sesión → RLS lo rechazaría) */
       t("Account created. Please confirm via the email we sent, then sign in.","success");setView("login");return false;
     }
     /* Fallback dev (sin Supabase): flujo local con localStorage */
