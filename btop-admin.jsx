@@ -4236,9 +4236,27 @@ export default function App(){
     if(setContacts)setContacts(p=>p.find(c=>c.email===email)?p:[...p,{id:"c"+Date.now(),name,email,phone,city:"",company:"",idDoc:"",registered:new Date().toISOString().split("T")[0],lastOrder:"",totalSpent:0,orders:0}]);
     t("Account created!");return true;
   };
-  const logout=()=>{if(isSupabaseConfigured&&supabase)supabase.auth.signOut();setUser(null);setView("home")};
-  /* Restaura la sesión de Supabase al recargar (persistida en localStorage por el SDK) */
-  useEffect(()=>{if(!supabase)return;supabase.auth.getSession().then(({data})=>{const su=data?.session?.user;if(su)setUser(userFromSupabase(su))}).catch(()=>{})},[]);
+  const userRef=useRef(null);useEffect(()=>{userRef.current=user;},[user]);
+  const loggingOutRef=useRef(false);
+  const logout=()=>{loggingOutRef.current=true;if(isSupabaseConfigured&&supabase)supabase.auth.signOut();setUser(null);setView("home")};
+  /* Restaura la sesión al recargar y SINCRONIZA con los cambios de auth de Supabase.
+     Si el refresh token expira/invalida (400 en /token?grant_type=refresh_token), el SDK
+     emite SIGNED_OUT → cerramos sesión con gracia en vez de dejar al usuario colgado. */
+  useEffect(()=>{
+    if(!supabase)return;
+    supabase.auth.getSession().then(({data})=>{const su=data?.session?.user;if(su)setUser(userFromSupabase(su))}).catch(()=>{});
+    const {data:sub}=supabase.auth.onAuthStateChange((event,session)=>{
+      if((event==="SIGNED_IN"||event==="TOKEN_REFRESHED"||event==="USER_UPDATED")&&session?.user){
+        setUser(userFromSupabase(session.user));
+      }else if(event==="SIGNED_OUT"){
+        const wasLoggedIn=!!userRef.current;
+        setUser(null);
+        if(wasLoggedIn&&!loggingOutRef.current){setView("home");if(t)t("Tu sesión expiró. Inicia sesión de nuevo.","error");}
+        loggingOutRef.current=false;
+      }
+    });
+    return ()=>{try{sub?.subscription?.unsubscribe?.();}catch(e){}};
+  },[]);
 
   const css=`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Space+Mono:wght@400;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}:root{--navy:#0A1628;--b9:#0B2545;--b8:#13315C;--b7:#134074;--b6:#1B4DDB;--b5:#2563EB;--b4:#3B82F6;--b3:#60A5FA;--b2:#93C5FD;--b1:#DBEAFE;--b0:#EFF6FF;--g9:#111827;--g7:#374151;--g5:#6B7280;--g3:#D1D5DB;--g2:#E5E7EB;--g1:#F3F4F6;--g0:#F9FAFB;--w:#FFF;--green:#059669;--red:#DC2626;--orange:#F59E0B;--f:'DM Sans',sans-serif;--fm:'Space Mono',monospace;--sh:0 4px 16px rgba(11,37,69,.10);--r:12px;--rL:20px}
