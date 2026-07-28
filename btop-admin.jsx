@@ -5176,7 +5176,7 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},cred
       {/* CLIENT INFO */}
       <div className="cd" style={{padding:24,marginBottom:24}}>
         <h3 style={{fontWeight:700,color:"var(--navy)",marginBottom:16}}>Customer Information</h3>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <div className="mf" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           <div style={{padding:12,background:"var(--g0)",borderRadius:10}}><div style={{fontSize:10,color:"var(--g5)",textTransform:"uppercase",fontWeight:600}}>Name</div><div style={{fontWeight:600,marginTop:2}}>{user.name}</div></div>
           <div style={{padding:12,background:"var(--g0)",borderRadius:10}}><div style={{fontSize:10,color:"var(--g5)",textTransform:"uppercase",fontWeight:600}}>Email</div><div style={{fontWeight:600,marginTop:2}}>{user.email}</div></div>
         </div>
@@ -5238,12 +5238,12 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},cred
           </div>
           <p style={{fontSize:13,color:"var(--g5)",marginBottom:16}}>After sending, fill in the details below for verification:</p>
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div className="mf" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               <div className="ig"><label>Email or Phone (sender) *</label><input className="inf" value={payDetail.zelleFrom} onChange={e=>upPay("zelleFrom",e.target.value)} placeholder="Your Zelle email or phone"/></div>
               <div className="ig"><label>Account Holder Name *</label><input className="inf" value={payDetail.zelleName} onChange={e=>upPay("zelleName",e.target.value)} placeholder="Full name on account"/></div>
             </div>
             <div className="ig"><label>Amount Sent *</label><input className="inf" value={payDetail.zelleAmount||totalDep.toFixed(2)} onChange={e=>upPay("zelleAmount",e.target.value)} placeholder={totalDep.toFixed(2)}/></div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div className="mf" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               <div className="ig"><label>Date of Payment *</label><input className="inf" type="date" value={payDetail.zelleDate} onChange={e=>upPay("zelleDate",e.target.value)}/></div>
               <div className="ig"><label>Time of Transfer</label><input className="inf" type="time" value={payDetail.zelleTime} onChange={e=>upPay("zelleTime",e.target.value)}/></div>
             </div>
@@ -5267,7 +5267,7 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},cred
           </div>
           {savedCash&&<button onClick={()=>{upPay("cashName",savedCash.cashName||user.name);upPay("cashPhone",savedCash.cashPhone||"")}} style={{display:"inline-flex",alignItems:"center",gap:8,marginBottom:12,padding:"8px 14px",background:"var(--b0)",border:"1px solid var(--b1)",borderRadius:10,cursor:"pointer",fontSize:13,fontWeight:600,color:"var(--b7)"}}>⚡ Use saved details — {savedCash.label}</button>}
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div className="mf" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               <div className="ig"><label>Full Name *</label><input className="inf" value={payDetail.cashName||user.name} onChange={e=>upPay("cashName",e.target.value)}/></div>
               <div className="ig"><label>Phone *</label><input className="inf" type="tel" value={payDetail.cashPhone} onChange={e=>upPay("cashPhone",e.target.value)} placeholder="(469) 000-0000"/></div>
             </div>
