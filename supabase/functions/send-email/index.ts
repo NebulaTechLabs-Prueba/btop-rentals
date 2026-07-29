@@ -64,6 +64,10 @@ function build(type: string, d: any) {
       // Respuesta manual del staff a un mensaje del formulario de contacto.
       return { subject: d.subject || 'Reply from BTOP Rentals',
         body: H('Reply from BTOP Rentals') + (d.client_name ? `<p style="margin:0 0 16px;font-size:16px;font-weight:700;color:${B.navy};">Hi ${esc(d.client_name)},</p>` : '') + textToHtml(d.message) + P('Questions? Just reply to this email.') };
+    case 'account-invite':
+      // Invitación de cuenta (cliente o staff). El enlace va bajo el dominio propio (no expone el backend).
+      return { subject: 'You’re invited to BTOP Rentals', badge: { text: 'INVITATION', bg: '#1E3A5F', fg: '#DBEAFE' },
+        body: H('You’re invited') + P(`Hi ${esc(d.name || '')}, you’ve been invited to create your BTOP Rentals account${d.role_label ? ` as <strong>${esc(d.role_label)}</strong>` : ''}. Click below to set your password and activate it.`) + btn(d.invite_url || '#', 'Activate account') + P('If the button doesn’t work, copy and paste this link into your browser:') + `<p style="margin:0 0 20px;font-size:13px;line-height:1.5;color:${B.blue};word-break:break-all;">${esc(d.invite_url || '')}</p>` };
     default:
       return null;
   }

@@ -2396,17 +2396,27 @@ function UsersMod({users,setUsers,roles,setRoles}){
     if(isSupabaseConfigured&&supabase){supabase.auth.resetPasswordForEmail(u.email,{redirectTo:location.origin+location.pathname}).then(({error})=>{if(error)console.warn("[reset]",error.message)});}
     setTimeout(()=>setResetSent(s=>s===u.email?"":s),3500);
   };
-  const [invErr,setInvErr]=useState("");const [invBusy,setInvBusy]=useState(false);
+  const [invErr,setInvErr]=useState("");const [invBusy,setInvBusy]=useState(false);const [invLink,setInvLink]=useState("");
   const roleToKey={"Super Admin":"admin","Fleet Manager":"sede","Sales Rep":"sales","Client":"client"};
+  /* Invitación de staff por NUESTRO flujo (tabla invites + accept-invite): sin correo de GoTrue,
+     enlace bajo el dominio propio (btop-rentals.com/?invite=…), cuenta creada ya confirmada al aceptar. */
   const sendInvite=async()=>{
-    if(!invEmail)return;
+    const email=invEmail.trim();
+    if(!email)return;
     if(!(isSupabaseConfigured&&supabase)){setInvErr("Invitaciones requieren Supabase configurado.");return;}
-    setInvBusy(true);setInvErr("");
+    setInvBusy(true);setInvErr("");setInvLink("");
     try{
-      const {data,error}=await supabase.functions.invoke("invite-staff",{body:{email:invEmail.trim(),role:roleToKey[invRole]||"sales",name:invEmail.split("@")[0],redirectTo:location.origin+location.pathname}});
-      if(error||data?.error){setInvErr((data&&data.error)||error.message||"No se pudo invitar");setInvBusy(false);return;}
-      setInvBusy(false);setInvEmail("");setInviting(false);
-      setUsers(p=>[...p.filter(x=>x.email!==invEmail.trim()),{id:invEmail.trim(),name:invEmail.split("@")[0],email:invEmail.trim(),role:invRole,status:"invited",last:"—",initials:invEmail.substring(0,2).toUpperCase()}]);
+      const role=roleToKey[invRole]||"sales";
+      const name=email.split("@")[0];
+      const token="INV"+Math.random().toString(36).slice(2,10).toUpperCase()+Date.now().toString(36).toUpperCase();
+      const {error:ie}=await supabase.from("invites").upsert({token,email,name,role,status:"active",invited_by:"admin"},{onConflict:"token"});
+      if(ie){setInvErr(ie.message||"No se pudo crear la invitación");setInvBusy(false);return;}
+      const link=`${location.origin}/?invite=${token}`;
+      const res=await sendEmail("account-invite",email,{name,invite_url:link,role_label:invRole});
+      setInvBusy(false);
+      setUsers(p=>[...p.filter(x=>x.email!==email),{id:email,name,email,role:invRole,status:"invited",last:"—",initials:email.substring(0,2).toUpperCase()}]);
+      if(res&&res.ok&&!res.skipped){setInvEmail("");setInviting(false);flash(`Invitación enviada a ${email}`);}
+      else{setInvLink(link);setInvErr(res&&res.skipped?"Los correos están OFF (Settings → Send transactional emails). Copia y comparte este enlace:":"El correo no se pudo enviar. Copia y comparte este enlace:");}
     }catch(e){setInvErr(String(e?.message||e));setInvBusy(false);}
   };
   const [userMsg,setUserMsg]=useState("");
@@ -2465,7 +2475,9 @@ function UsersMod({users,setUsers,roles,setRoles}){
           <F label="Email Address *"><Inp value={invEmail} onChange={setInvEmail} type="email" placeholder="user@company.com"/></F>
           <F label="Assign Role *"><Sel value={invRole} onChange={setInvRole} options={roles.map(r=>r.name)}/></F>
           <div className="bg-stone-50 rounded-xl p-3 text-xs text-stone-600"><strong>Permissions for {invRole}:</strong><div className="mt-2 flex flex-wrap gap-2">{PERMS.map((pm,i)=>{const role=roles.find(r=>r.name===invRole);const lvl=role?.perms[i]||0;return (<span key={pm} className={`px-2 py-1 rounded ${lvl>=2?"bg-emerald-100 text-emerald-700":lvl===1?"bg-blue-100 text-blue-700":"bg-stone-200 text-stone-500"}`}>{pm}: {lvl===3?"Admin":lvl===2?"Edit":lvl===1?"Read":"None"}</span>);})}</div></div>
-          <button onClick={sendInvite} disabled={!invEmail} className="w-full px-5 py-2.5 bg-blue-900 text-white rounded-full text-sm hover:bg-blue-700 disabled:opacity-40 inline-flex items-center justify-center gap-2"><Mail className="w-4 h-4"/>Send Invitation</button>
+          <button onClick={sendInvite} disabled={invBusy||!invEmail} className="w-full px-5 py-2.5 bg-blue-900 text-white rounded-full text-sm hover:bg-blue-700 disabled:opacity-40 inline-flex items-center justify-center gap-2"><Mail className="w-4 h-4"/>{invBusy?"Enviando…":"Send Invitation"}</button>
+          {invErr&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">{invErr}</div>}
+          {invLink&&<div className="text-xs bg-stone-50 border border-stone-200 rounded-lg p-2.5 break-all font-mono select-all text-blue-700">{invLink}</div>}
         </div>
       </div></div>}
 

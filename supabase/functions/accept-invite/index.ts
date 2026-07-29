@@ -28,17 +28,19 @@ Deno.serve(async (req: Request) => {
     await admin.auth.admin.updateUserById(uid, { app_metadata: { role } });
     await admin.from('profiles').upsert({ id: uid, email: inv.email, name: inv.name || inv.email.split('@')[0], role });
 
-    // Registra el contacto (autoritativo, deduplica por email) en la forma que hidrata la app (columna data jsonb).
-    const nowDate = new Date().toISOString().split('T')[0];
-    const { data: exRows } = await admin.from('contacts').select('id, data').eq('email', inv.email).limit(1);
-    const ex = (exRows || [])[0];
-    if (ex) {
-      const d = { ...(ex.data || {}), name: inv.name || ex.data?.name, email: inv.email, phone: (ex.data?.phone) || inv.phone || '', hasAccount: true };
-      await admin.from('contacts').update({ has_account: true, name: inv.name || undefined, data: d }).eq('id', ex.id);
-    } else {
-      const cid = crypto.randomUUID();
-      const d = { id: cid, name: inv.name || '', email: inv.email, phone: inv.phone || '', city: '', company: '', idDoc: '', registered: nowDate, lastOrder: '', totalSpent: 0, orders: 0, hasAccount: true };
-      await admin.from('contacts').insert({ id: cid, name: inv.name || '', email: inv.email, phone: inv.phone || '', has_account: true, registered: nowDate, data: d });
+    // Registra el contacto SOLO para clientes (autoritativo, deduplica por email). El staff no va al CRM.
+    if (role === 'client') {
+      const nowDate = new Date().toISOString().split('T')[0];
+      const { data: exRows } = await admin.from('contacts').select('id, data').eq('email', inv.email).limit(1);
+      const ex = (exRows || [])[0];
+      if (ex) {
+        const d = { ...(ex.data || {}), name: inv.name || ex.data?.name, email: inv.email, phone: (ex.data?.phone) || inv.phone || '', hasAccount: true };
+        await admin.from('contacts').update({ has_account: true, name: inv.name || undefined, data: d }).eq('id', ex.id);
+      } else {
+        const cid = crypto.randomUUID();
+        const d = { id: cid, name: inv.name || '', email: inv.email, phone: inv.phone || '', city: '', company: '', idDoc: '', registered: nowDate, lastOrder: '', totalSpent: 0, orders: 0, hasAccount: true };
+        await admin.from('contacts').insert({ id: cid, name: inv.name || '', email: inv.email, phone: inv.phone || '', has_account: true, registered: nowDate, data: d });
+      }
     }
 
     // Marca la invitación como usada.
