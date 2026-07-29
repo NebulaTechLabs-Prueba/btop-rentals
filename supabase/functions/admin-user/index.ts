@@ -13,7 +13,7 @@ Deno.serve(async (req: Request) => {
     const { data: me } = await admin.auth.getUser(token);
     if (!me?.user || me.user.app_metadata?.role !== 'admin') return json({ error: 'Solo un administrador puede gestionar cuentas.' }, 403);
 
-    const { action, email, role, active } = await req.json();
+    const { action, email, role, active, password } = await req.json();
     if (!email) return json({ error: 'Falta el email' }, 400);
 
     const { data: prof } = await admin.from('profiles').select('id, role').eq('email', email).maybeSingle();
@@ -36,6 +36,12 @@ Deno.serve(async (req: Request) => {
       if (e2) return json({ error: e2.message }, 400);
       await admin.from('profiles').update({ disabled: active === false }).eq('id', prof.id);
       return json({ ok: true, active: active !== false });
+    }
+    if (action === 'set_password') {
+      if (!password || String(password).length < 6) return json({ error: 'La contraseña debe tener al menos 6 caracteres.' }, 400);
+      const { error: e3 } = await admin.auth.admin.updateUserById(prof.id, { password: String(password) });
+      if (e3) return json({ error: e3.message }, 400);
+      return json({ ok: true });
     }
     return json({ error: 'Acción inválida' }, 400);
   } catch (e) {

@@ -1654,6 +1654,8 @@ function ContactsMod({contacts:propContacts,setContacts:propSetContacts,orders=[
   const [pwOpen,setPwOpen]=useState(false);
   const [pwForm,setPwForm]=useState({newPw:"",confirmPw:""});
   const [pwSent,setPwSent]=useState(false);
+  const [pwErr,setPwErr]=useState("");
+  const [pwBusy,setPwBusy]=useState(false);
   /* Disable / Delete confirmation flows */
   const [confirmAction,setConfirmAction]=useState(null); /* {kind:"disable"|"enable"|"delete", contact} */
   const filtered=contacts.filter(c=>!q||(c.name||"").toLowerCase().includes(q.toLowerCase())||(c.email||"").toLowerCase().includes(q.toLowerCase()));
@@ -1665,14 +1667,24 @@ function ContactsMod({contacts:propContacts,setContacts:propSetContacts,orders=[
     setViewing(prev=>({...prev,...editForm}));
     setEditing(false);
   };
-  const updatePassword=()=>{
-    if(!pwForm.newPw||pwForm.newPw!==pwForm.confirmPw)return;
+  const updatePassword=async()=>{
+    if(!pwForm.newPw||pwForm.newPw.length<6||pwForm.newPw!==pwForm.confirmPw)return;
+    setPwErr("");setPwBusy(true);
+    /* Fija la contraseña REAL en Supabase Auth (Edge Function con service role) */
+    if(isSupabaseConfigured&&supabase){
+      const {data,error}=await supabase.functions.invoke("admin-user",{body:{action:"set_password",email:viewing.email,password:pwForm.newPw}});
+      if(error||data?.error){setPwErr((data&&data.error)||error.message||"No se pudo cambiar la contraseña");setPwBusy(false);return}
+    }
     setContacts(p=>p.map(c=>c.id===viewing.id?{...c,hasAccount:true,passwordUpdatedAt:new Date().toISOString()}:c));
     setViewing(prev=>({...prev,hasAccount:true,passwordUpdatedAt:new Date().toISOString()}));
     setPwForm({newPw:"",confirmPw:""});
+    setPwBusy(false);
     setPwOpen(false);
   };
   const sendResetLink=()=>{
+    setPwErr("");
+    /* Envía un correo REAL de recuperación (Supabase Auth) */
+    if(isSupabaseConfigured&&supabase&&viewing?.email){supabase.auth.resetPasswordForEmail(viewing.email,{redirectTo:location.origin+location.pathname}).then(({error})=>{if(error)console.warn("[reset]",error.message)});}
     setPwSent(true);
     setContacts(p=>p.map(c=>c.id===viewing.id?{...c,resetSentAt:new Date().toISOString()}:c));
     setTimeout(()=>setPwSent(false),3500);
@@ -1835,11 +1847,12 @@ function ContactsMod({contacts:propContacts,setContacts:propSetContacts,orders=[
                   </div>
                   {pwForm.newPw&&pwForm.confirmPw&&pwForm.newPw!==pwForm.confirmPw&&<div className="text-xs text-red-600">⚠️ Passwords don't match</div>}
                   {pwForm.newPw&&pwForm.newPw.length<8&&<div className="text-xs text-amber-600">⚠️ Password is too short (min 8 characters)</div>}
+                  {pwErr&&<div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{pwErr}</div>}
                   <div className="flex gap-2 pt-2">
-                    <button onClick={()=>{setPwOpen(false);setPwForm({newPw:"",confirmPw:""})}} className="flex-1 px-3 py-2 border border-stone-200 rounded-lg text-xs font-semibold">Cancel</button>
-                    <button onClick={updatePassword} disabled={!pwForm.newPw||pwForm.newPw.length<8||pwForm.newPw!==pwForm.confirmPw} className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold disabled:opacity-40">✓ {viewing.hasAccount?"Update":"Set"} password</button>
+                    <button onClick={()=>{setPwOpen(false);setPwForm({newPw:"",confirmPw:""});setPwErr("")}} className="flex-1 px-3 py-2 border border-stone-200 rounded-lg text-xs font-semibold">Cancel</button>
+                    <button onClick={updatePassword} disabled={pwBusy||!pwForm.newPw||pwForm.newPw.length<8||pwForm.newPw!==pwForm.confirmPw} className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold disabled:opacity-40">{pwBusy?"Guardando…":`✓ ${viewing.hasAccount?"Update":"Set"} password`}</button>
                   </div>
-                  <p className="text-[10px] text-stone-400 italic">In a real deployment this would be hashed and stored securely. The client will be notified by email.</p>
+                  <p className="text-[10px] text-stone-400 italic">The password is applied to the client's account securely. Only requests for existing accounts succeed.</p>
                 </>}
               </div>
             </div>
@@ -1919,6 +1932,21 @@ function ContactsMod({contacts:propContacts,setContacts:propSetContacts,orders=[
 function MessagesMod({messages,setMessages}){
   const [selected,setSelected]=useState(null);
   const [reply,setReply]=useState("");
+  const [replyBusy,setReplyBusy]=useState(false);
+  const [replyMsg,setReplyMsg]=useState("");
+  const sendReply=async()=>{
+    if(!reply.trim()||replyBusy||!selected?.email)return;
+    setReplyBusy(true);setReplyMsg("");
+    const res=await sendEmail("reply",selected.email,{client_name:selected.name,message:reply.trim(),subject:`Re: ${selected.type} — BTOP Rentals`});
+    setReplyBusy(false);
+    if(res&&res.skipped){setReplyMsg("⚠ Transactional emails are OFF (enable in Settings). Reply not sent.");setTimeout(()=>setReplyMsg(""),5000);return}
+    if(res&&res.ok){
+      setMessages(p=>p.map(m=>m.id===selected.id?{...m,read:true,replied:true,repliedAt:new Date().toISOString().split("T")[0],replyText:reply.trim()}:m));
+      setSelected(s=>s&&s.id===selected.id?{...s,replied:true}:s);
+      setReply("");setReplyMsg("✓ Reply sent to "+selected.email);
+    }else{setReplyMsg("Could not send the reply. Please try again.");}
+    setTimeout(()=>setReplyMsg(""),5000);
+  };
   const unread=messages.filter(m=>!m.read).length;
   const markRead=(id)=>setMessages(p=>p.map(m=>m.id===id?{...m,read:true}:m));
   const markAllRead=()=>setMessages(p=>p.map(m=>({...m,read:true})));
@@ -1989,10 +2017,11 @@ function MessagesMod({messages,setMessages}){
             </div>
             <div><p className="text-xs font-semibold text-stone-500 uppercase mb-2">Message</p><div className="bg-stone-50 rounded-xl p-4 text-sm text-stone-700 leading-relaxed">{selected.msg}</div></div>
             <div className="border-t border-stone-200 pt-4">
-              <p className="text-xs font-semibold text-stone-500 uppercase mb-2">Quick Reply</p>
-              <textarea value={reply} onChange={e=>setReply(e.target.value)} placeholder="Type your reply..." rows={3} className="w-full px-4 py-2.5 bg-white border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"/>
+              <p className="text-xs font-semibold text-stone-500 uppercase mb-2">Quick Reply {selected.replied&&<span className="text-emerald-600 normal-case">· replied {selected.repliedAt||""}</span>}</p>
+              <textarea value={reply} onChange={e=>setReply(e.target.value)} placeholder={`Type your reply to ${selected.email}...`} rows={3} className="w-full px-4 py-2.5 bg-white border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"/>
+              {replyMsg&&<div className={`mt-2 text-xs font-semibold ${replyMsg.startsWith("✓")?"text-emerald-700":"text-amber-700"}`}>{replyMsg}</div>}
               <div className="flex gap-2 mt-2">
-                <button onClick={()=>{if(reply)setReply("")}} className="flex-1 py-2 bg-blue-900 text-white rounded-lg text-sm font-medium hover:bg-blue-700 inline-flex items-center justify-center gap-1.5"><Mail className="w-3.5 h-3.5"/>Send Reply</button>
+                <button onClick={sendReply} disabled={replyBusy||!reply.trim()} className="flex-1 py-2 bg-blue-900 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40 inline-flex items-center justify-center gap-1.5"><Mail className="w-3.5 h-3.5"/>{replyBusy?"Sending…":"Send Reply"}</button>
                 <button onClick={()=>delMsg(selected.id)} className="py-2 px-3 border border-red-200 text-red-600 rounded-lg text-sm hover:bg-red-50"><Trash2 className="w-3.5 h-3.5"/></button>
               </div>
             </div>
@@ -2092,7 +2121,7 @@ function InvoiceMod(){
   const [confirmMove,setConfirmMove]=useState(null);
   const moveStatus=(id,ns)=>{setConfirmMove({id,ns,inv:invoices.find(i=>i.id===id)})};
   const doMove=()=>{if(confirmMove){setInvoices(p=>p.map(i=>i.id===confirmMove.id?{...i,status:confirmMove.ns}:i));if(viewInv?.id===confirmMove.id)setViewInv(p=>({...p,status:confirmMove.ns}));
-    if(confirmMove.ns==="sent"&&confirmMove.inv){const iv=confirmMove.inv;sendEmail("invoice",iv.email,{client_name:iv.client,invoice_number:iv.id,amount_due:"$"+calcTotal(iv).toFixed(2),due_date:iv.due||"",pay_url:"https://btop-rentals.com/"});}
+    if(confirmMove.ns==="sent"&&confirmMove.inv){const iv=confirmMove.inv;sendEmail("invoice",iv.email,{client_name:iv.client,invoice_number:iv.id,amount_due:"$"+calcTotal(iv).toFixed(2),due_date:iv.due||"",pay_url:location.origin+location.pathname});}
     setConfirmMove(null)}};
   const doDelete=()=>{if(delConfirm){setInvoices(p=>p.filter(i=>i.id!==delConfirm));if(viewInv?.id===delConfirm)setViewInv(null)}setDelConfirm(null)};
 
@@ -3330,7 +3359,8 @@ function PaymentLinkButton({order,orders=[]}){
   const gen=async()=>{
     setLoading(true);setErr("");setUrl("");
     const group=order.gid?orders.filter(o=>o.gid===order.gid):[order];
-    const link=await createCheckoutSession({items:cartToStripeLineItems(group),orderRef:order.gid||order.oid,email:order.ue,successUrl:"https://btop-rentals.com/?checkout=success",cancelUrl:"https://btop-rentals.com/?checkout=cancel"});
+    const base=location.origin+location.pathname;
+    const link=await createCheckoutSession({items:cartToStripeLineItems(group),orderRef:order.gid||order.oid,email:order.ue,successUrl:base+"?checkout=success",cancelUrl:base+"?checkout=cancel"});
     setLoading(false);
     if(link)setUrl(link); else setErr("No se pudo generar el link. Verifica que Stripe esté activo y con la clave secreta cargada.");
   };
@@ -3648,9 +3678,9 @@ function SalesPanel({user,sv,logout,t,contacts=[],setContacts,fleet=[],orders=[]
     if(!contact){t&&t("Select or create a contact first","error");return}
     startBooking&&startBooking(contact);
   };
-  const saveAccount=()=>{
+  const saveAccount=async()=>{
     if(acc.pw&&acc.pw!==acc.pw2){t&&t("Passwords do not match","error");return}
-    const ok=updateMyAccount&&updateMyAccount({name:acc.name,phone:acc.phone,password:acc.pw||undefined});
+    const ok=updateMyAccount&&await updateMyAccount({name:acc.name,phone:acc.phone,password:acc.pw||undefined});
     if(ok)setAcc(a=>({...a,pw:"",pw2:""}));
   };
   return <div style={{position:"fixed",inset:0,zIndex:100,background:"#fafaf9",overflow:"auto"}}>
@@ -4049,7 +4079,7 @@ export default function App(){
     /* Correo real (Resend) del contrato, con el PDF firmado adjunto. Respeta el kill switch email_enabled. */
     let attachment;
     try{const doc=generateSignedPdf(c,{clientSig:c.lesseeSig?.dataUrl,repSig:c.lessorSig?.dataUrl,repName:c.lessorSig?.name||company.repName,company,clientSignedAt:c.lesseeSig?.signedAt,repSignedAt:c.lessorSig?.signedAt,download:false});attachment={filename:`${c.contractNum||"agreement"}.pdf`,content:doc.output("datauristring").split(",")[1]};}catch(e){}
-    sendEmail("rental-agreement",c.email,{client_name:c.client,contract_number:c.contractNum,download_url:"https://btop-rentals.com/"},attachment);};
+    sendEmail("rental-agreement",c.email,{client_name:c.client,contract_number:c.contractNum,download_url:location.origin+location.pathname},attachment);};
   /* One contract per CART/purchase (orders sharing gid). Lessee signature stamped from checkout; Lessor signed later by admin.
      The agreement is only "sent" (emailed) when it satisfies the configured signing policy. */
   const sendContract=(groupOrders)=>{
@@ -4102,7 +4132,7 @@ export default function App(){
   const rejectOrder=(oid)=>{
     const o=orders.find(x=>x.oid===oid);const gid=o?(o.gid||o.oid):oid;
     setOrders(p=>p.map(x=>(x.gid||x.oid)===gid?{...x,status:"Cancelled",payState:"rejected"}:x));
-    if(o)sendEmail("payment-rejected",o.ue,{client_name:o.un,order_number:o.oid,resubmit_url:`https://btop-rentals.com/`});
+    if(o)sendEmail("payment-rejected",o.ue,{client_name:o.un,order_number:o.oid,resubmit_url:location.origin+location.pathname});
     t("Payment rejected. Order cancelled.","error");
   };
   /* A Sales employee schedules a reservation for a contact → Pending order tagged with salesRep (commission accrues on admin validation) */
@@ -4134,21 +4164,16 @@ export default function App(){
   };
   /* Client uses the magic link → sets a password → account is created, contact marked as account-holder, token invalidated */
   const acceptInvite=async(token,password)=>{
-    /* Producción (Supabase): valida el token por RPC y crea una cuenta REAL en Supabase Auth. */
+    /* Producción (Supabase): la Edge Function valida el token y crea la cuenta YA CONFIRMADA
+       (independiente de la confirmación por email) + registra el contacto server-side. Luego iniciamos sesión. */
     if(isSupabaseConfigured&&supabase){
-      const {data,error}=await supabase.rpc("get_invite",{p_token:token});
-      const inv=Array.isArray(data)?data[0]:data;
-      if(error||!inv||!inv.email){t("This invite link is invalid or already used. Please request a new one.","error");return false}
-      const {data:su,error:se}=await supabase.auth.signUp({email:inv.email,password,options:{data:{name:inv.name||""}}});
-      if(se){t(se.message||"Could not create the account","error");return false}
-      try{await supabase.rpc("consume_invite",{p_token:token});}catch(e){/* best-effort */}
-      if(su?.session){
-        /* Con sesión (sin confirmación de email): marca el contacto como titular (write RLS-permitido) */
-        setContacts(p=>{const ex=p.find(c=>(c.email||"").toLowerCase()===inv.email.toLowerCase());if(ex)return p.map(c=>c===ex?{...c,hasAccount:true,phone:c.phone||inv.phone}:c);return[{id:nid(),name:inv.name,email:inv.email,phone:inv.phone||"",city:"",company:"",idDoc:"",registered:new Date().toISOString().split("T")[0],lastOrder:"",totalSpent:0,orders:0,hasAccount:true},...p]});
-        t("Account created! You're signed in.","success");return true; /* onAuthStateChange fija el user */
-      }
-      /* Confirmación de email pendiente: no escribimos aún (sin sesión → RLS lo rechazaría) */
-      t("Account created. Please confirm via the email we sent, then sign in.","success");setView("login");return false;
+      const {data,error}=await supabase.functions.invoke("accept-invite",{body:{token,password}});
+      if(error||data?.error){t((data&&data.error)||error?.message||"Could not create the account","error");return false}
+      /* Cuenta creada y confirmada → iniciar sesión de inmediato (sin depender del correo) */
+      const {error:se}=await supabase.auth.signInWithPassword({email:data.email,password});
+      if(se){t("Account created. Please sign in.","success");setView("login");return false}
+      t("Account created! You're signed in.","success");
+      return true; /* onAuthStateChange fija el user; el contacto ya quedó registrado server-side */
     }
     /* Fallback dev (sin Supabase): flujo local con localStorage */
     const inv=invites.find(i=>i.token===token&&i.status==="active");
@@ -4278,10 +4303,17 @@ export default function App(){
     setView("sales");
   };
   /* Employee light self-service: update own display name / phone / password (staff manage their own account) */
-  const updateMyAccount=({name,phone,password})=>{
+  const updateMyAccount=async({name,phone,password})=>{
     if(!user)return false;
-    if(password&&password.length<4){t("Password must be at least 4 characters","error");return false}
-    setUsers(p=>p.map(u=>u.email===user.email?{...u,name:name??u.name,phone:phone??u.phone,...(password?{pw:password}:{})}:u));
+    if(password&&password.length<6){t("Password must be at least 6 characters","error");return false}
+    if(isSupabaseConfigured&&supabase){
+      /* Contraseña + metadata en Supabase Auth (la sesión actual autoriza el cambio) */
+      const {error}=await supabase.auth.updateUser(password?{password,data:{name,phone}}:{data:{name,phone}});
+      if(error){t(error.message||"Could not update the account","error");return false}
+      /* Refleja nombre/teléfono en profiles (RLS: el usuario puede actualizar su propia fila) para que otros lo vean */
+      try{await supabase.from("profiles").update({name:name??user.name,phone:phone??user.phone}).eq("email",user.email)}catch(e){}
+    }
+    setUsers(p=>p.map(u=>u.email===user.email?{...u,name:name??u.name,phone:phone??u.phone}:u));
     setUser(u=>({...u,name:name??u.name,phone:phone??u.phone}));
     t(password?"Account updated — password changed":"Account updated","success");
     return true;
@@ -4415,7 +4447,7 @@ html,body{overflow-x:hidden;max-width:100%}body{font-family:var(--f);background:
     </nav>
 
     <main>
-      {view==="home"&&<Home fleet={fleet} sv={setView} ac={addCart} t={t} bookings={fleetBookings} cart={cart} orders={orders} spaces={spaces}/>}
+      {view==="home"&&<Home fleet={fleet} sv={setView} ac={addCart} t={t} bookings={fleetBookings} cart={cart} orders={orders} spaces={spaces} company={company}/>}
       {view==="fleet"&&<Fl fleet={fleet} sv={setView} ac={addCart} bookings={fleetBookings} setCartOpen={setCartOpen} t={t} cart={cart} orders={orders}/>}
       {view==="storage"&&<StoragePage sv={setView} ac={addCart} setCartOpen={setCartOpen} spaces={spaces} cart={cart}/>}
       {view==="calendar"&&<CalendarPage fleet={fleet} bookings={fleetBookings} spaces={spaces}/>}
@@ -4553,7 +4585,7 @@ function Testimonials(){
   );
 }
 
-function Home({fleet,sv,ac,t,bookings=[],cart=[],orders=[],spaces:propSpaces}){
+function Home({fleet,sv,ac,t,bookings=[],cart=[],orders=[],spaces:propSpaces,company={}}){
   const [qu,setQu]=useState(null);const [unitDates,setUnitDates]=useState([{s:null,e:null,sel:"start"}]);const [unitTimes,setUnitTimes]=useState(["08:00"]);const [step,setStep]=useState(1);
   const [activeUnit,setActiveUnit]=useState(0);
   const [qty,setQty]=useState(1);const [unitMiles,setUnitMiles]=useState([0]);
@@ -4897,7 +4929,7 @@ function Home({fleet,sv,ac,t,bookings=[],cart=[],orders=[],spaces:propSpaces}){
       <p className="ss" style={{margin:"0 auto 32px"}}>Book today. Competitive rates, quality equipment, outstanding service.</p>
       <div style={{display:"flex",gap:16,justifyContent:"center",flexWrap:"wrap"}}>
         <button onClick={()=>document.getElementById("qb")?.scrollIntoView({behavior:"smooth"})} className="btn blg bp"><X n="cal" s={20}/>Book Now</button>
-        <a href="tel:+14696907112" className="btn blg bs"><X n="phone" s={20}/>+1 469 690 712</a>
+        {(company.phone||"").trim()&&<a href={`tel:${company.phone.replace(/[^0-9+]/g,"")}`} className="btn blg bs"><X n="phone" s={20}/>{company.phone}</a>}
       </div>
     </section>
   </div>;
@@ -5358,14 +5390,14 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},cred
               <div className="ig"><label>Time of Transfer</label><input className="inf" type="time" value={payDetail.zelleTime} onChange={e=>upPay("zelleTime",e.target.value)}/></div>
             </div>
             <div className="ig"><label>Payment receipt (attachment) *</label>
-              <input type="file" accept="image/*,application/pdf" disabled={zProofBusy} onChange={async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;upPay("zelleProof",f.name);setZProofBusy(true);setZProofErr("");try{const m=await uploadMedia(f,"zelle/proof");upPay("zelleProofUrl",m.url);upPay("zelleProofPath",m.path);}catch(err){setZProofErr("No se pudo adjuntar. Envía el recibo a btoprentals@gmail.com");}finally{setZProofBusy(false);}}} style={{fontSize:13,padding:"8px 0"}}/>
+              <input type="file" accept="image/*,application/pdf" disabled={zProofBusy} onChange={async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;upPay("zelleProof",f.name);setZProofBusy(true);setZProofErr("");try{const m=await uploadMedia(f,"zelle/proof");upPay("zelleProofUrl",m.url);upPay("zelleProofPath",m.path);}catch(err){setZProofErr("No se pudo adjuntar. Envía el recibo a "+(company.email||SUPPORT.email));}finally{setZProofBusy(false);}}} style={{fontSize:13,padding:"8px 0"}}/>
               {zProofBusy&&<div style={{fontSize:12,color:"var(--navy)",marginTop:4}}>Subiendo…</div>}
               {zProofErr&&<div style={{fontSize:12,color:"var(--red)",fontWeight:600,marginTop:4}}>{zProofErr}</div>}
               {payDetail.zelleProof&&!zProofBusy&&<div style={{fontSize:12,color:"var(--green)",fontWeight:600,marginTop:4}}>📎 {payDetail.zelleProof}{payDetail.zelleProofUrl?" adjuntado ✓":" (pendiente)"}</div>}
             </div>
             <label style={{display:"flex",alignItems:"flex-start",gap:12,padding:14,background:payDetail.zelleReceipt?"#D1FAE5":"#fff",borderRadius:10,border:payDetail.zelleReceipt?"2px solid var(--green)":"2px solid var(--g2)",cursor:"pointer"}}>
               <input type="checkbox" checked={payDetail.zelleReceipt} onChange={e=>upPay("zelleReceipt",e.target.checked)} style={{width:18,height:18,accentColor:"var(--green)",marginTop:2}}/>
-              <div><div style={{fontWeight:700,fontSize:14,color:payDetail.zelleReceipt?"#065F46":"var(--navy)"}}>I have sent the Zelle transfer</div><div style={{fontSize:12,color:"var(--g5)",marginTop:2}}>Please send a screenshot of the receipt to btoprentals@gmail.com for faster confirmation.</div></div>
+              <div><div style={{fontWeight:700,fontSize:14,color:payDetail.zelleReceipt?"#065F46":"var(--navy)"}}>I have sent the Zelle transfer</div><div style={{fontSize:12,color:"var(--g5)",marginTop:2}}>Please send a screenshot of the receipt to {company.email||SUPPORT.email} for faster confirmation.</div></div>
             </label>
           </div>
           <p style={{fontSize:12,color:"var(--orange)",marginTop:12,fontWeight:600}}>⏳ Zelle payments require manual verification. Your order will be confirmed once we verify receipt.</p>
@@ -5498,11 +5530,11 @@ function Re({dr,sv}){const [nm,snm]=useState("");const [em,sem]=useState("");con
     </div>
   </div>;
 }
-function Fo({t,sv}){const [em,sem]=useState("");const [sent,ss]=useState(false);const go=()=>{if(!em)return;ss(true);t("Reset link sent!")};
+function Fo({t,sv}){const [em,sem]=useState("");const [sent,ss]=useState(false);const [busy,setBusy]=useState(false);const go=async()=>{if(!em||busy)return;setBusy(true);try{if(isSupabaseConfigured&&supabase){const {error}=await supabase.auth.resetPasswordForEmail(em.trim(),{redirectTo:location.origin+location.pathname});if(error){t(error.message||"Could not send the reset link","error");setBusy(false);return}}ss(true);t("Reset link sent!")}catch(e){t(String(e?.message||e),"error")}setBusy(false)};
   return <div className="fi" style={{minHeight:"80vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"linear-gradient(135deg,var(--b0),var(--g0))"}}>
     <div className="cd" style={{maxWidth:440,width:"100%",padding:40}}>
       <div style={{textAlign:"center",marginBottom:32}}><div style={{width:60,height:60,borderRadius:16,background:"linear-gradient(135deg,var(--orange),#F97316)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><X n="mail" s={28} c="#fff"/></div><h2 style={{fontSize:24,fontWeight:800,color:"var(--navy)"}}>Forgot Password?</h2></div>
-      {!sent?<div style={{display:"flex",flexDirection:"column",gap:16}}><div className="ig"><label>Email</label><input className="inf" type="email" value={em} onChange={e=>sem(e.target.value)} placeholder="you@email.com"/></div><button onClick={go} className="btn bp blg" style={{width:"100%",justifyContent:"center"}}>Send Reset Link</button></div>:<div style={{textAlign:"center",padding:20}}><div style={{fontSize:48,marginBottom:16}}>📧</div><p style={{color:"var(--g5)"}}>Reset link sent to <strong>{em}</strong></p></div>}
+      {!sent?<div style={{display:"flex",flexDirection:"column",gap:16}}><div className="ig"><label>Email</label><input className="inf" type="email" value={em} onChange={e=>sem(e.target.value)} placeholder="you@email.com"/></div><button onClick={go} disabled={busy} className="btn bp blg" style={{width:"100%",justifyContent:"center",opacity:busy?.6:1}}>{busy?"Sending…":"Send Reset Link"}</button></div>:<div style={{textAlign:"center",padding:20}}><div style={{fontSize:48,marginBottom:16}}>📧</div><p style={{color:"var(--g5)"}}>Reset link sent to <strong>{em}</strong></p></div>}
       <div style={{textAlign:"center",marginTop:24}}><button onClick={()=>sv("login")} style={{background:"none",border:"none",color:"var(--b6)",cursor:"pointer",fontWeight:600}}>← Back to Sign In</button></div>
     </div>
   </div>;
@@ -6007,10 +6039,17 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout,creditLine,orders_all
             <div className="ig"><label>New Password</label><input className="inf" type="password" value={pw.newPw} onChange={e=>sPw(p=>({...p,newPw:e.target.value}))} placeholder="Min 8 characters"/></div>
             <div className="ig"><label>Confirm New Password</label><input className="inf" type="password" value={pw.confirm} onChange={e=>sPw(p=>({...p,confirm:e.target.value}))} placeholder="Repeat"/></div>
             {pwMsg&&<div style={{padding:"10px 14px",borderRadius:10,fontSize:13,fontWeight:600,background:pwMsg.ok?"rgba(5,150,105,.1)":"rgba(220,38,38,.1)",color:pwMsg.ok?"var(--green)":"var(--red)"}}>{pwMsg.text}</div>}
-            <button onClick={()=>{
+            <button onClick={async()=>{
               if(!pw.current){sPwMsg({ok:false,text:"Enter current password"});return}
               if(pw.newPw.length<8){sPwMsg({ok:false,text:"New password must be at least 8 characters"});return}
               if(pw.newPw!==pw.confirm){sPwMsg({ok:false,text:"Passwords do not match"});return}
+              if(!(isSupabaseConfigured&&supabase&&user?.email)){sPwMsg({ok:false,text:"Service unavailable"});return}
+              sPwMsg({ok:true,text:"Updating…"});
+              /* Verifica la contraseña actual iniciando sesión de nuevo, luego actualiza en Supabase Auth */
+              const {error:ve}=await supabase.auth.signInWithPassword({email:user.email,password:pw.current});
+              if(ve){sPwMsg({ok:false,text:"Current password is incorrect"});return}
+              const {error}=await supabase.auth.updateUser({password:pw.newPw});
+              if(error){sPwMsg({ok:false,text:error.message||"Could not update password"});return}
               sPw({current:"",newPw:"",confirm:""});sPwMsg({ok:true,text:"Password updated successfully!"});setTimeout(()=>sPwMsg(null),3000);
             }} className="btn bp bsm" style={{alignSelf:"flex-start"}}><X n="ok" s={14}/>Update Password</button>
           </div>
