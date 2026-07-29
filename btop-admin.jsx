@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, createContext, useContext } from "react";
 import { jsPDF } from "jspdf";
 import { usePersistentState } from "./src/lib/persistence.js";
-import { loadFleetUnits, loadSpaces, loadProfiles, syncFleetUnits, syncSpaces } from "./src/lib/catalog.js";
+import { loadFleetUnits, loadSpaces, loadProfiles, syncFleetUnits, syncSpaces, syncSpaceRentals } from "./src/lib/catalog.js";
 import { supabase, isSupabaseConfigured } from "./src/lib/supabase.js";
 import { uploadMedia, removeMedia } from "./src/lib/storage.js";
 import { sendEmail } from "./src/lib/email.js";
@@ -3989,6 +3989,13 @@ export default function App(){
   useEffect(()=>{let off=false;const n=(v,d)=>v==null?(d??0):Number(v);loadFleetUnits().then(rows=>{if(off||!rows)return;setFleet(rows.map(r=>{const s=r.specs||{};return{id:r.id,plate:r.plate,name:r.name,category:r.category,cat:r.category,year:r.year,make:r.make,model:r.model,status:r.status||"available",daily:n(r.daily),weekly:n(r.weekly),monthly:n(r.monthly),depD:n(r.deposit_daily,200),depW:n(r.deposit_weekly,300),depM:n(r.deposit_monthly,500),depositDaily:n(r.deposit_daily,200),depositWeekly:n(r.deposit_weekly,300),depositMonthly:n(r.deposit_monthly,500),rateMile:n(r.mile_daily),mileDaily:n(r.mile_daily),mileWeekly:n(r.mile_weekly),mileMonthly:n(r.mile_monthly),mileTiers:r.mile_tiers||[],fuelType:r.fuel_type,transmission:s.transmission||"",eqCapacity:s.eqCapacity||"",shortDesc:s.shortDesc||"",type:s.shortDesc||r.model,desc:s.shortDesc||"",photos:(r.media&&r.media.photos)||[],docs:(r.media&&r.media.docs)||[],img:catIcon(r.category)};}));}).catch(()=>{});return()=>{off=true};},[]);
   /* FLIP FASE 1 — hidrata los espacios de almacenamiento desde Supabase. Fail-safe: si falla, se queda el seed. */
   useEffect(()=>{let off=false;loadSpaces().then(rows=>{if(off||!rows)return;setSpaces(rows);}).catch(()=>{});return()=>{off=true};},[]);
+  /* Persiste las rentas de espacios (activeRentals) en Supabase cuando cambian — staff-only por RLS.
+     Salta el primer render (seed); el upsert es idempotente por oid, así que la rehidratación no duplica. */
+  const prevSpacesRef=useRef(null);
+  useEffect(()=>{
+    if(prevSpacesRef.current===null){prevSpacesRef.current=spaces;return;}
+    if(prevSpacesRef.current!==spaces){syncSpaceRentals(prevSpacesRef.current,spaces);prevSpacesRef.current=spaces;}
+  },[spaces]);
   const [contacts,setContacts]=useCollection("contacts",{pk:"id",authKey:user?.email,keyCols:c=>({name:c.name,email:c.email}),seed:[]});
   const [cart,setCart]=useState([]);
   const [showCart,setShowCart]=useState(false);

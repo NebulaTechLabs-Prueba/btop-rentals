@@ -71,6 +71,33 @@ function syncTable(table, toRow, prev, next) {
 export function syncFleetUnits(prev, next) { syncTable('fleet_units', fleetToRow, prev, next); }
 export function syncSpaces(prev, next) { syncTable('storage_spaces', spaceToRow, prev, next); }
 
+// Persiste las rentas de espacios en `space_rentals` (staff-only por RLS). Diff por `oid`:
+// upsert de rentas nuevas/cambiadas, delete de las removidas (release/cancelación). Best-effort.
+function flattenRentals(spaces) {
+  const m = new Map();
+  (spaces || []).forEach((s) => (s.activeRentals || []).forEach((r) => {
+    if (r && r.oid) m.set(r.oid, { space_id: s.id, r });
+  }));
+  return m;
+}
+export function syncSpaceRentals(prev, next) {
+  if (!supabase) return;
+  try {
+    const p = flattenRentals(prev), n = flattenRentals(next);
+    const toUpsert = [];
+    n.forEach((v, oid) => {
+      const before = p.get(oid);
+      if (!before || JSON.stringify(before.r) !== JSON.stringify(v.r) || before.space_id !== v.space_id) {
+        toUpsert.push({ space_id: v.space_id, oid, inv_num: v.r.invNum || null, tenant: v.r.tenant || null, tenant_email: v.r.tenantEmail || null, tenant_phone: v.r.tenantPhone || null, lease_start: v.r.leaseStart || null, lease_end: v.r.leaseEnd || null });
+      }
+    });
+    const toDelete = [];
+    p.forEach((_v, oid) => { if (!n.has(oid)) toDelete.push(oid); });
+    if (toUpsert.length) supabase.from('space_rentals').upsert(toUpsert, { onConflict: 'oid' }).then(({ error }) => { if (error) console.warn('[space_rentals sync]', error.message); });
+    if (toDelete.length) supabase.from('space_rentals').delete().in('oid', toDelete).then(({ error }) => { if (error) console.warn('[space_rentals del]', error.message); });
+  } catch (e) { console.warn('[space_rentals sync]', e?.message); }
+}
+
 // Carga los espacios de almacenamiento + sus rentas activas desde Supabase.
 // Devuelve el arreglo ya con la forma que usa la app, o null (→ el caller mantiene el seed).
 export async function loadSpaces() {
