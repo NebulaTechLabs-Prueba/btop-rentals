@@ -3,7 +3,7 @@ import { jsPDF } from "jspdf";
 import { usePersistentState } from "./src/lib/persistence.js";
 import { loadFleetUnits, loadSpaces, loadProfiles, syncFleetUnits, syncSpaces, syncSpaceRentals } from "./src/lib/catalog.js";
 import { supabase, isSupabaseConfigured } from "./src/lib/supabase.js";
-import { uploadMedia, removeMedia } from "./src/lib/storage.js";
+import { uploadMedia, removeMedia, uploadPrivate, signedUrl, removePrivate } from "./src/lib/storage.js";
 import { sendEmail } from "./src/lib/email.js";
 import { useCollection, useSetting, useEmailMap } from "./src/lib/collection.js";
 import {
@@ -3122,11 +3122,20 @@ function printContract(c){
 }
 
 /* Download a stored client document (data URL kept for small files; otherwise a metadata stub) */
-function downloadDoc(doc){
+async function downloadDoc(doc){
   try{
     const a=document.createElement("a");
-    a.href=doc.dataUrl||("data:text/plain;charset=utf-8,"+encodeURIComponent(`Document: ${doc.name}\nCategory: ${doc.category}\nUploaded: ${doc.uploadedAt}\n\n(Original file is stored on the server in the production build.)`));
-    a.download=doc.name||"document";a.click();
+    if(doc.path){
+      /* Documento en bucket privado: genera signed URL y ábrelo (RLS: dueño o staff) */
+      const url=await signedUrl(doc.path);
+      if(!url){alert("No se pudo abrir el documento (permiso o expirado).");return;}
+      a.href=url;a.target="_blank";a.rel="noreferrer";
+    }else{
+      /* Legacy: documento embebido como data URL */
+      a.href=doc.dataUrl||("data:text/plain;charset=utf-8,"+encodeURIComponent(`Document: ${doc.name}\nCategory: ${doc.category}\nUploaded: ${doc.uploadedAt}\n\n(No file stored.)`));
+      a.download=doc.name||"document";
+    }
+    a.click();
   }catch(e){}
 }
 
@@ -6003,10 +6012,15 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout,creditLine,orders_all
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(100%,280px),1fr))",gap:16}}>
           {[["Driver's License","Required for rental contracts","license"],["Insurance Certificate","Your own insurance (if applicable)","insurance"],["Other / Business Docs","EIN letter, W-9, etc.","other"]].map(([title,d,k])=>{
             const mine=clientDocs.filter(x=>x.category===k);
-            const onPick=(e)=>{const f=e.target.files&&e.target.files[0];if(!f||!addClientDoc)return;const base={id:"doc-"+Date.now(),name:f.name,category:k,size:f.size,uploadedAt:new Date().toISOString()};
-              if(f.size<1500000){const r=new FileReader();r.onload=()=>{addClientDoc({...base,dataUrl:r.result});t&&t("Document uploaded","success")};r.readAsDataURL(f);}
-              else{addClientDoc(base);t&&t("Document uploaded (large file: reference stored)","success");}
-              e.target.value="";};
+            const onPick=async(e)=>{const f=e.target.files&&e.target.files[0];if(!f||!addClientDoc)return;const base={id:"doc-"+Date.now(),name:f.name,category:k,size:f.size,uploadedAt:new Date().toISOString()};
+              e.target.value="";
+              try{
+                /* Sube al bucket PRIVADO (cualquier tamaño). Solo se guarda el path; la descarga usa signed URL. */
+                const m=await uploadPrivate(f,`docs/${k}`);
+                addClientDoc({...base,path:m.path});
+                t&&t("Document uploaded","success");
+              }catch(err){t&&t("No se pudo subir el documento. Intenta de nuevo.","error");}
+            };
             return <div key={k} style={{padding:20,background:"var(--g0)",borderRadius:14,border:"2px dashed var(--g2)"}}>
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
               <div style={{width:40,height:40,borderRadius:10,background:"var(--b1)",display:"flex",alignItems:"center",justifyContent:"center"}}><X n="list" s={20} c="var(--b6)"/></div>
@@ -6014,7 +6028,7 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout,creditLine,orders_all
             </div>
             {mine.map(doc=><div key={doc.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"8px 10px",background:"#fff",borderRadius:8,border:"1px solid var(--g2)",marginBottom:6}}>
               <span style={{fontSize:12,fontWeight:600,color:"var(--navy)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📄 {doc.name}</span>
-              <span style={{display:"flex",gap:6,flexShrink:0}}><button onClick={()=>downloadDoc(doc)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--b6)"}}><X n="arr" s={14}/></button><button onClick={()=>removeClientDoc&&removeClientDoc(doc.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--red)"}}><X n="trash" s={14}/></button></span>
+              <span style={{display:"flex",gap:6,flexShrink:0}}><button onClick={()=>downloadDoc(doc)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--b6)"}}><X n="arr" s={14}/></button><button onClick={()=>{if(doc.path)removePrivate(doc.path);removeClientDoc&&removeClientDoc(doc.id)}} style={{background:"none",border:"none",cursor:"pointer",color:"var(--red)"}}><X n="trash" s={14}/></button></span>
             </div>)}
             <label style={{display:"block",textAlign:"center",padding:16,background:"#fff",borderRadius:10,border:"1px solid var(--g2)",cursor:"pointer"}}>
               <X n="arr" s={20} c="var(--g3)"/>
