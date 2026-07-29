@@ -42,6 +42,7 @@ export function fleetToRow(v) {
     mile_daily: num(v.rateMile ?? v.mileDaily), mile_weekly: num(v.mileWeekly), mile_monthly: num(v.mileMonthly),
     mile_tiers: v.mileTiers || [], fuel_type: v.fuelType || null,
     specs: { transmission: v.transmission || '', eqCapacity: v.eqCapacity || '', shortDesc: v.shortDesc || v.desc || '' },
+    media: { photos: v.photos || [], docs: v.docs || [] },
     active: v.active !== false,
   };
 }
@@ -51,7 +52,8 @@ export function spaceToRow(s) {
     id: s.id, name: s.name || '', type: s.type || '', size: s.size || null, custom_size: s.customSize || null,
     max_weight: s.maxWeight || null, surface: s.surface || null, location: s.location || null, access: s.access || null, branch: s.branch || null,
     daily: num(s.daily), weekly: num(s.weekly), monthly: num(s.monthly), deposit: num(s.deposit),
-    status: s.status || 'available', inventory_enabled: !!s.inventoryEnabled, total_stock: num(s.totalStock), notes: s.internalNotes || '', active: s.active !== false,
+    status: s.status || 'available', inventory_enabled: !!s.inventoryEnabled, total_stock: num(s.totalStock), notes: s.internalNotes || '',
+    media: { photos: s.photos || [], docs: s.docs || [] }, active: s.active !== false,
   };
 }
 // Diff genérico prev→next: upsert de lo cambiado, delete de lo removido. Best-effort, no bloquea la UI.
@@ -88,7 +90,7 @@ export async function loadSpaces() {
       daily: n(s.daily), weekly: n(s.weekly), monthly: n(s.monthly), deposit: n(s.deposit),
       status: s.status || 'available', tenant: '', since: '',
       inventoryEnabled: !!s.inventory_enabled, totalStock: n(s.total_stock), active: s.active !== false,
-      internalNotes: s.notes || '', docs: [],
+      internalNotes: s.notes || '', docs: (s.media && s.media.docs) || [], photos: (s.media && s.media.photos) || [],
       activeRentals: rentals
         .filter((r) => r.space_id === s.id)
         .map((r) => ({

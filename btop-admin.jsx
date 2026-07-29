@@ -3,6 +3,7 @@ import { jsPDF } from "jspdf";
 import { usePersistentState } from "./src/lib/persistence.js";
 import { loadFleetUnits, loadSpaces, loadProfiles, syncFleetUnits, syncSpaces } from "./src/lib/catalog.js";
 import { supabase, isSupabaseConfigured } from "./src/lib/supabase.js";
+import { uploadMedia, removeMedia } from "./src/lib/storage.js";
 import { sendEmail } from "./src/lib/email.js";
 import { useCollection, useSetting, useEmailMap } from "./src/lib/collection.js";
 import {
@@ -174,6 +175,21 @@ function Inp({value,onChange,type="text",placeholder="",disabled=false}){return 
 function Sel({value,onChange,options}){return (<select value={value} onChange={e=>onChange(e.target.value)} className="w-full px-4 py-2.5 bg-white border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">{options.map(o=>Array.isArray(o)?<option key={o[0]} value={o[0]}>{o[1]}</option>:<option key={o} value={o}>{o}</option>)}</select>);}
 function Tog({label,checked,onChange,desc}){return (<button type="button" onClick={onChange} className={`w-full text-left flex items-center gap-3 p-3 rounded-xl cursor-pointer border transition-colors ${checked?"bg-blue-50 border-blue-200":"bg-white border-stone-200 hover:bg-stone-50"}`}><div className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors shrink-0 ${checked?"bg-blue-600":"bg-stone-300"}`}><div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${checked?"translate-x-4":""}`}/></div><div><div className="text-sm font-medium">{label}</div>{desc&&<div className="text-xs text-stone-500">{desc}</div>}</div></button>);}
 function TArea({value,onChange,placeholder="",rows=3}){return (<textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows} className="w-full px-4 py-2.5 bg-white border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"/>);}
+/* Subida real de archivos a Supabase Storage (bucket fleet-media). onUploaded recibe {url,path,name}. */
+function Uploader({prefix="misc",accept="image/*",label="Upload",onUploaded,className}){
+  const [busy,setBusy]=useState(false);const [err,setErr]=useState("");
+  const pick=async(file)=>{if(!file)return;setBusy(true);setErr("");try{const m=await uploadMedia(file,prefix);onUploaded&&onUploaded(m);}catch(e){setErr("Error");console.warn("[upload]",e?.message);setTimeout(()=>setErr(""),2500);}setBusy(false);};
+  return (<label className={className||"inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-stone-200 rounded-lg text-xs cursor-pointer hover:bg-stone-100"}><Upload className="w-3 h-3"/>{busy?"Subiendo…":(err||label)}<input type="file" accept={accept} className="hidden" onChange={e=>{pick(e.target.files&&e.target.files[0]);e.target.value="";}}/></label>);
+}
+/* Galería de fotos: miniaturas + slot para subir (máx `max`). photos = [{url,path,name}]. */
+function PhotoSlots({photos=[],prefix="misc",max=8,onChange}){
+  const add=(m)=>onChange([...(photos||[]),m]);
+  const rm=(i)=>{const arr=[...(photos||[])];const [g]=arr.splice(i,1);onChange(arr);if(g?.path)removeMedia(g.path);};
+  return (<div className="flex gap-3 flex-wrap">
+    {(photos||[]).map((ph,i)=>(<div key={ph.path||i} className="relative w-20 h-20 rounded-xl overflow-hidden border border-stone-200 group bg-stone-50"><img src={ph.url} alt="" className="w-full h-full object-cover"/><button type="button" onClick={()=>rm(i)} className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs leading-none">×</button></div>))}
+    {(photos||[]).length<max&&<Uploader prefix={prefix} accept="image/*" label="" onUploaded={add} className="w-20 h-20 bg-stone-100 border-2 border-dashed border-stone-200 rounded-xl flex items-center justify-center cursor-pointer hover:bg-stone-50 text-stone-400"/>}
+  </div>);
+}
 
 /* ═══ PAGINATION HELPER ═══ */
 function usePagination(data,perPage=10){
@@ -192,8 +208,8 @@ function ProductEditor({item,onClose,onSave,categories=ALL_CATS,vehicleCats=VEHI
   const isEquip=!vehicleCats.includes(p.category);
   const isNew=!item;
   const tabs=[{id:"basic",label:"Product",icon:Tag},{id:"pricing",label:"Pricing",icon:DollarSign},{id:"specs",label:"Specs",icon:Gauge},{id:"fuel",label:"Fuel",icon:Droplets},{id:"status",label:"Status",icon:CircleDot},{id:"docs",label:"Documents",icon:FileText},{id:"rules",label:"Rules",icon:Shield},{id:"commercial",label:"Commercial",icon:Info},{id:"controls",label:"Internal",icon:Lock}];
-  const addDoc=(name)=>{const docs=[...(p.docs||[]),{name,date:new Date().toISOString().split("T")[0],id:nid()}];u("docs",docs)};
-  const rmDoc=(id)=>u("docs",(p.docs||[]).filter(d=>d.id!==id));
+  const addDoc=(type,media)=>{const docs=[...(p.docs||[]).filter(d=>d.type!==type),{id:nid(),name:type,type,url:media.url,path:media.path,fileName:media.name,date:new Date().toISOString().split("T")[0]}];u("docs",docs)};
+  const rmDoc=(id)=>{const d=(p.docs||[]).find(x=>x.id===id);u("docs",(p.docs||[]).filter(x=>x.id!==id));if(d?.path)removeMedia(d.path);};
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/40">
       <div className="bg-white w-full max-w-4xl flex flex-col shadow-2xl">
@@ -207,7 +223,7 @@ function ProductEditor({item,onClose,onSave,categories=ALL_CATS,vehicleCats=VEHI
             <div className="grid grid-cols-2 gap-4"><F label="Name *"><Inp value={p.name} onChange={v=>u("name",v)} placeholder="Freightliner Cascadia 2016"/></F><F label="Category *"><Sel value={p.category} onChange={v=>u("category",v)} options={categories}/></F></div>
             <div className="grid grid-cols-3 gap-4"><F label="Plate"><Inp value={p.plate} onChange={v=>u("plate",v)}/></F><F label="VIN"><Inp value={p.vin} onChange={v=>u("vin",v)}/></F><F label="Year"><Inp value={p.year} onChange={v=>u("year",v)} type="number"/></F></div>
             <div className="grid grid-cols-2 gap-4"><F label="Make"><Inp value={p.make} onChange={v=>u("make",v)}/></F><F label="Model"><Inp value={p.model} onChange={v=>u("model",v)}/></F></div>
-            <F label="Photos"><div className="flex gap-3">{[0,1,2,3].map(i=>(<div key={i} className="w-20 h-20 bg-stone-100 border-2 border-dashed border-stone-200 rounded-xl flex items-center justify-center cursor-pointer hover:bg-stone-50"><ImagePlus className="w-4 h-4 text-stone-400"/></div>))}</div></F>
+            <F label="Photos" hint="Se muestran en el catálogo público"><PhotoSlots photos={p.photos} prefix={`fleet/${p.id||"new"}/photos`} onChange={v=>u("photos",v)}/></F>
           </div>}
           {tab==="pricing"&&<div className="space-y-6">
             {/* RATE TABLE */}
@@ -301,8 +317,8 @@ function ProductEditor({item,onClose,onSave,categories=ALL_CATS,vehicleCats=VEHI
           {tab==="status"&&<div className="grid grid-cols-2 gap-3">{VSTAT.map(s=>(<button key={s.v} onClick={()=>u("status",s.v)} className={`p-4 rounded-xl border-2 text-left ${p.status===s.v?"border-blue-500 bg-blue-50":"border-stone-200"}`}><Pill tone={s.t}><CircleDot className="w-3 h-3"/>{s.l}</Pill></button>))}</div>}
           {tab==="maint"&&<div className="space-y-5"><div className="grid grid-cols-2 gap-4"><F label="Last Service"><Inp value={p.lastService} onChange={v=>u("lastService",v)} type="date"/></F><F label="Next Service"><Inp value={p.nextService} onChange={v=>u("nextService",v)} placeholder="Date or mileage"/></F></div><F label="Mechanic Notes"><TArea value={p.mechNotes} onChange={v=>u("mechNotes",v)}/></F></div>}
           {tab==="docs"&&<div className="space-y-4">
-            {["Insurance","Registration","Inspection","Technical Sheet","Contract"].map(d=>(<div key={d} className="flex items-center gap-4 p-4 bg-stone-50 rounded-xl border border-stone-200"><div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center shrink-0"><FileCheck className="w-5 h-5"/></div><div className="flex-1"><div className="text-sm font-medium">{d}</div></div><button onClick={()=>addDoc(d)} className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-stone-200 rounded-lg text-xs hover:bg-stone-100"><Upload className="w-3 h-3"/>Upload</button></div>))}
-            {(p.docs||[]).length>0&&<div className="mt-4"><p className="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-2">Uploaded Documents</p>{(p.docs||[]).map(d=>(<div key={d.id} className="flex items-center gap-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200 mb-2"><FileCheck className="w-4 h-4 text-emerald-600"/><span className="flex-1 text-sm font-medium text-emerald-800">{d.name}</span><span className="text-xs text-emerald-600">{d.date}</span><button onClick={()=>rmDoc(d.id)} className="p-1 hover:bg-emerald-100 rounded"><Xx className="w-3 h-3 text-emerald-700"/></button></div>))}</div>}
+            {["Insurance","Registration","Inspection","Technical Sheet","Contract"].map(d=>{const ex=(p.docs||[]).find(x=>x.type===d);return (<div key={d} className="flex items-center gap-4 p-4 bg-stone-50 rounded-xl border border-stone-200"><div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${ex?"bg-emerald-50 text-emerald-600":"bg-blue-50 text-blue-700"}`}><FileCheck className="w-5 h-5"/></div><div className="flex-1 min-w-0"><div className="text-sm font-medium">{d}</div>{ex&&<a href={ex.url} target="_blank" rel="noreferrer" className="text-[11px] text-blue-600 hover:underline truncate inline-block max-w-full">📎 {ex.fileName||"ver archivo"}</a>}</div>{ex&&<button onClick={()=>rmDoc(ex.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>}<Uploader prefix={`fleet/${p.id||"new"}/docs`} accept="image/*,application/pdf" label={ex?"Reemplazar":"Upload"} onUploaded={(m)=>addDoc(d,m)}/></div>);})}
+            <p className="text-[11px] text-stone-400">Los documentos se guardan en el almacenamiento seguro y quedan asociados a la unidad. Toca 📎 para verlos/descargarlos.</p>
           </div>}
           {tab==="rules"&&<div className="space-y-5"><F label="Restrictions"><TArea value={p.restrictions||""} onChange={v=>u("restrictions",v)}/></F><F label="Prohibited Zones"><TArea value={p.prohibitedZones||""} onChange={v=>u("prohibitedZones",v)}/></F><F label="Driver Requirements"><TArea value={p.driverReqs||""} onChange={v=>u("driverReqs",v)}/></F><F label="Fuel Policy"><TArea value={p.fuelPolicy||""} onChange={v=>u("fuelPolicy",v)}/></F></div>}
           {tab==="commercial"&&<div className="space-y-5"><F label="Short Description"><Inp value={p.shortDesc} onChange={v=>u("shortDesc",v)}/></F><F label="Long Description"><TArea value={p.longDesc||""} onChange={v=>u("longDesc",v)} rows={4}/></F><F label="Use Cases"><TArea value={p.useCases||""} onChange={v=>u("useCases",v)}/></F></div>}
@@ -319,18 +335,18 @@ function ProductEditor({item,onClose,onSave,categories=ALL_CATS,vehicleCats=VEHI
 
 /* ═══ SPACE EDITOR ═══ */
 function SpaceEditor({item,onClose,onSave}){
-  const blank={id:"",name:"",type:"Outdoor",size:"20ft",customSize:"",maxWeight:"",surface:"Concrete",location:"",access:"24/7",daily:0,weekly:0,monthly:0,feeOverweight:0,feeAfterHours:0,deposit:0,status:"available",tenant:"",since:"",active:true,branch:"Laredo",internalNotes:"",docs:[],inventoryEnabled:false,totalStock:10,activeRentals:[]};
+  const blank={id:"",name:"",type:"Outdoor",size:"20ft",customSize:"",maxWeight:"",surface:"Concrete",location:"",access:"24/7",daily:0,weekly:0,monthly:0,feeOverweight:0,feeAfterHours:0,deposit:0,status:"available",tenant:"",since:"",active:true,branch:"Laredo",internalNotes:"",docs:[],photos:[],inventoryEnabled:false,totalStock:10,activeRentals:[]};
   const [s,setS]=useState(item?{...blank,...item}:blank);
   const [tab,setTab]=useState("info");
   const u=(k,v)=>setS(p=>({...p,[k]:v}));
-  const addDoc=(name)=>u("docs",[...(s.docs||[]),{name,date:new Date().toISOString().split("T")[0],id:nid()}]);
-  const rmDoc=(id)=>u("docs",(s.docs||[]).filter(d=>d.id!==id));
+  const addDoc=(type,media)=>u("docs",[...(s.docs||[]).filter(d=>d.type!==type),{id:nid(),name:type,type,url:media.url,path:media.path,fileName:media.name,date:new Date().toISOString().split("T")[0]}]);
+  const rmDoc=(id)=>{const d=(s.docs||[]).find(x=>x.id===id);u("docs",(s.docs||[]).filter(x=>x.id!==id));if(d?.path)removeMedia(d.path);};
   const tabs=[{id:"info",label:"Space Info",icon:Warehouse},{id:"pricing",label:"Pricing",icon:DollarSign},{id:"inventory",label:"Inventory",icon:Package},{id:"status",label:"Status",icon:CircleDot},{id:"docs",label:"Documents",icon:FileText},{id:"controls",label:"Internal",icon:Lock}];
   const inUse=(s.activeRentals||[]).length;
   const remaining=Math.max(0,(s.totalStock||0)-inUse);
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/40"><div className="bg-white w-full max-w-3xl flex flex-col shadow-2xl">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-stone-50 shrink-0"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center"><Warehouse className="w-5 h-5"/></div><div><h2 className="text-lg font-semibold">{!item?"Add Space":`Edit: ${s.name}`}</h2></div></div><button onClick={onClose} className="p-2 hover:bg-stone-200 rounded-full"><Xx className="w-5 h-5"/></button></div>
+    <div className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/40"><div className="bg-white w-full max-w-4xl flex flex-col shadow-2xl">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-stone-50 shrink-0"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center"><Warehouse className="w-5 h-5"/></div><div><h2 className="text-lg font-semibold">{!item?"Add Space":`Edit: ${s.name}`}</h2><p className="text-xs text-stone-500">{s.type} · {s.inventoryEnabled?`${s.totalStock} lotes`:"single tenant"}</p></div></div><button onClick={onClose} className="p-2 hover:bg-stone-200 rounded-full"><Xx className="w-5 h-5"/></button></div>
       <div className="flex gap-1 px-4 py-2 border-b border-stone-200 overflow-x-auto shrink-0">{tabs.map(t=>{const Ic=t.icon;return (<button key={t.id} onClick={()=>setTab(t.id)} className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap ${tab===t.id?"bg-blue-900 text-white":"text-stone-600 hover:bg-stone-100"}`}><Ic className="w-3.5 h-3.5"/>{t.label}</button>);})}</div>
       <div className="flex-1 overflow-y-auto px-6 py-6">
         {tab==="info"&&<div className="space-y-5">
@@ -340,6 +356,7 @@ function SpaceEditor({item,onClose,onSave}){
           <div className="grid grid-cols-2 gap-4"><F label="Max Weight"><Inp value={s.maxWeight||""} onChange={v=>u("maxWeight",v)} placeholder="45,000 lbs"/></F><F label="Surface"><Sel value={s.surface||"Concrete"} onChange={v=>u("surface",v)} options={["Concrete","Gravel","Asphalt","Dirt"]}/></F></div>
           <F label="Internal Location" hint="Zone, block, space number"><Inp value={s.location||""} onChange={v=>u("location",v)} placeholder="Zone B, Block 3"/></F>
           <div className="grid grid-cols-2 gap-4"><F label="Access"><Sel value={s.access||"24/7"} onChange={v=>u("access",v)} options={[["24/7","24/7 Access"],["business","Business Hours"],["restricted","By Appointment"]]}/></F><F label="Tenant"><Inp value={s.tenant||""} onChange={v=>u("tenant",v)}/></F></div>
+          <F label="Photos" hint="Se muestran en el catálogo público"><PhotoSlots photos={s.photos} prefix={`space/${s.id||"new"}/photos`} onChange={v=>u("photos",v)}/></F>
         </div>}
         {tab==="pricing"&&<div className="space-y-5">
           <div className="grid grid-cols-3 gap-4"><F label="Daily"><Inp value={s.daily||""} onChange={v=>u("daily",Number(v))} type="number"/></F><F label="Weekly"><Inp value={s.weekly||""} onChange={v=>u("weekly",Number(v))} type="number"/></F><F label="Monthly *"><Inp value={s.monthly||""} onChange={v=>u("monthly",Number(v))} type="number"/></F></div>
@@ -384,9 +401,8 @@ function SpaceEditor({item,onClose,onSave}){
           </>}
         </div>}
         {tab==="status"&&<div className="grid grid-cols-2 gap-3">{SSTAT.map(st=>(<button key={st.v} onClick={()=>u("status",st.v)} className={`p-4 rounded-xl border-2 text-left ${s.status===st.v?"border-blue-500 bg-blue-50":"border-stone-200"}`}><Pill tone={st.v==="occupied"?"emerald":st.v==="reserved"?"blue":st.v==="maintenance"?"amber":"stone"}><CircleDot className="w-3 h-3"/>{st.l}</Pill></button>))}</div>}
-        {tab==="docs"&&<div className="space-y-4">
-          {["Storage Contract","Insurance Certificate"].map(d=>(<div key={d} className="flex items-center gap-4 p-4 bg-stone-50 rounded-xl border border-stone-200"><FileText className="w-5 h-5 text-amber-700 shrink-0"/><div className="flex-1 text-sm font-medium">{d}</div><button onClick={()=>addDoc(d)} className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-stone-200 rounded-lg text-xs"><Upload className="w-3 h-3"/>Upload</button></div>))}
-          {(s.docs||[]).length>0&&<div className="mt-4"><p className="text-xs font-semibold uppercase text-stone-500 mb-2">Uploaded</p>{(s.docs||[]).map(d=>(<div key={d.id} className="flex items-center gap-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200 mb-2"><FileCheck className="w-4 h-4 text-emerald-600"/><span className="flex-1 text-sm font-medium text-emerald-800">{d.name}</span><span className="text-xs text-emerald-600">{d.date}</span><button onClick={()=>rmDoc(d.id)} className="p-1 hover:bg-emerald-100 rounded"><Xx className="w-3 h-3"/></button></div>))}</div>}
+        {tab==="docs"&&<div className="space-y-3">
+          {["Storage Contract","Insurance Certificate","Inspection Report"].map(d=>{const ex=(s.docs||[]).find(x=>x.type===d);return(<div key={d} className="flex items-center gap-4 p-4 bg-stone-50 rounded-xl border border-stone-200"><FileText className={`w-5 h-5 shrink-0 ${ex?"text-emerald-600":"text-amber-700"}`}/><div className="flex-1"><div className="text-sm font-medium">{d}</div>{ex&&<a href={ex.url} target="_blank" rel="noreferrer" className="text-xs text-blue-700 hover:underline inline-flex items-center gap-1">📎 {ex.fileName||"Ver archivo"}</a>}</div><Uploader prefix={`space/${s.id||"new"}/docs`} accept="image/*,application/pdf" label={ex?"Reemplazar":"Upload"} onUploaded={(m)=>addDoc(d,m)}/>{ex&&<button onClick={()=>rmDoc(ex.id)} className="p-2 hover:bg-red-50 text-red-500 rounded-lg"><Trash2 className="w-4 h-4"/></button>}</div>)})}
         </div>}
         {tab==="controls"&&<div className="space-y-5"><Tog label="Active" checked={s.active!==false} onChange={()=>u("active",!s.active)}/><F label="Branch"><Sel value={s.branch||"Laredo"} onChange={v=>u("branch",v)} options={["Laredo","Dallas","Houston","San Antonio"]}/></F><F label="Notes"><TArea value={s.internalNotes||""} onChange={v=>u("internalNotes",v)}/></F></div>}
       </div>
@@ -2253,8 +2269,10 @@ function InvoiceMod(){
               </F>
               <F label="Company Logo">
                 <div className="flex items-center gap-4 p-4 bg-stone-50 rounded-xl border-2 border-dashed border-stone-200">
-                  <div className="w-16 h-16 bg-white rounded-lg border border-stone-200 flex items-center justify-center"><ImagePlus className="w-6 h-6 text-stone-400"/></div>
-                  <div><div className="text-sm font-medium">Upload Logo</div><div className="text-xs text-stone-500">PNG or SVG, max 2MB</div></div>
+                  <div className="w-16 h-16 bg-white rounded-lg border border-stone-200 flex items-center justify-center overflow-hidden">{pdfConfig.logo?<img src={pdfConfig.logo} alt="logo" className="max-w-full max-h-full object-contain"/>:<ImagePlus className="w-6 h-6 text-stone-400"/>}</div>
+                  <div className="flex-1"><div className="text-sm font-medium">Upload Logo</div><div className="text-xs text-stone-500">PNG or SVG, max 2MB</div></div>
+                  <Uploader prefix="invoice/logo" accept="image/*" label={pdfConfig.logo?"Reemplazar":"Upload"} onUploaded={(m)=>setPdfConfig(p=>({...p,logo:m.url,logoPath:m.path}))}/>
+                  {pdfConfig.logo&&<button onClick={()=>{if(pdfConfig.logoPath)removeMedia(pdfConfig.logoPath);setPdfConfig(p=>({...p,logo:"",logoPath:""}))}} className="p-2 hover:bg-red-50 text-red-500 rounded-lg"><Trash2 className="w-4 h-4"/></button>}
                 </div>
               </F>
             </div>
@@ -2262,7 +2280,7 @@ function InvoiceMod(){
           <SC title="Preview">
             <div className="bg-white border border-stone-200 rounded-xl p-6 text-sm" style={{fontFamily:"Arial,sans-serif"}}>
               <div className="flex justify-between items-start border-b-2 pb-4 mb-4" style={{borderColor:pdfConfig.color}}>
-                <div><div className="text-xl font-bold" style={{color:pdfConfig.color}}>{pdfConfig.companyName}</div><div className="text-[11px] text-stone-500 mt-1">{pdfConfig.address}<br/>{pdfConfig.phone} · {pdfConfig.email}</div></div>
+                <div>{pdfConfig.logo&&<img src={pdfConfig.logo} alt="logo" className="h-9 mb-1 object-contain"/>}<div className="text-xl font-bold" style={{color:pdfConfig.color}}>{pdfConfig.companyName}</div><div className="text-[11px] text-stone-500 mt-1">{pdfConfig.address}<br/>{pdfConfig.phone} · {pdfConfig.email}</div></div>
                 <div className="text-right"><div className="text-lg font-bold" style={{color:pdfConfig.color}}>INV-001</div><div className="text-[11px] text-stone-500">Date: 2026-04-14</div></div>
               </div>
               <div className="bg-stone-50 rounded-lg p-3 mb-4 text-xs"><strong>Bill To:</strong> Client Name<br/><span className="text-stone-500">client@example.com</span></div>
@@ -3376,7 +3394,7 @@ function OrdersPayMod({orders,setOrders,approveOrder,rejectOrder,authUsers=[]}){
               <div><span className="text-stone-400">Account holder:</span> {o.payDetail.zelleName||"—"}</div>
               <div><span className="text-stone-400">Amount:</span> ${o.payDetail.zelleAmount||"—"}</div>
               <div><span className="text-stone-400">Payment date:</span> {o.payDetail.zelleDate||"—"}{o.payDetail.zelleTime?` ${o.payDetail.zelleTime}`:""}</div>
-              <div><span className="text-stone-400">Proof:</span> {o.payDetail.zelleProof?<span className="text-emerald-700 font-semibold">📎 {o.payDetail.zelleProof}</span>:<span className="text-red-600">not attached</span>}</div>
+              <div><span className="text-stone-400">Proof:</span> {o.payDetail.zelleProof?(o.payDetail.zelleProofUrl?<a href={o.payDetail.zelleProofUrl} target="_blank" rel="noreferrer" className="text-blue-700 font-semibold hover:underline">📎 {o.payDetail.zelleProof}</a>:<span className="text-emerald-700 font-semibold">📎 {o.payDetail.zelleProof}</span>):<span className="text-red-600">not attached</span>}</div>
             </div>}
             {o.payMethod==="cash"&&<div className="p-3 bg-stone-50 rounded-xl text-xs"><div className="font-semibold text-stone-700 uppercase mb-1">Cash / Check</div><p>Customer to coordinate payment at the office. Direct line: <strong>{SUPPORT.phone}</strong>. Approve once payment is received.</p></div>}
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
@@ -3915,7 +3933,7 @@ export default function App(){
   const [spaces,setSpaces]=useState(admSeedSpaces);
   /* FLIP FASE 1 — hidrata la flota desde Supabase (lectura pública). Fail-safe: si falla, se queda el seed.
      Supabase serializa columnas numeric como string → convertir a Number para price()/dep(). */
-  useEffect(()=>{let off=false;const n=(v,d)=>v==null?(d??0):Number(v);loadFleetUnits().then(rows=>{if(off||!rows)return;setFleet(rows.map(r=>{const s=r.specs||{};return{id:r.id,plate:r.plate,name:r.name,category:r.category,cat:r.category,year:r.year,make:r.make,model:r.model,status:r.status||"available",daily:n(r.daily),weekly:n(r.weekly),monthly:n(r.monthly),depD:n(r.deposit_daily,200),depW:n(r.deposit_weekly,300),depM:n(r.deposit_monthly,500),depositDaily:n(r.deposit_daily,200),depositWeekly:n(r.deposit_weekly,300),depositMonthly:n(r.deposit_monthly,500),rateMile:n(r.mile_daily),mileDaily:n(r.mile_daily),mileWeekly:n(r.mile_weekly),mileMonthly:n(r.mile_monthly),mileTiers:r.mile_tiers||[],fuelType:r.fuel_type,transmission:s.transmission||"",eqCapacity:s.eqCapacity||"",shortDesc:s.shortDesc||"",type:s.shortDesc||r.model,desc:s.shortDesc||"",img:catIcon(r.category)};}));}).catch(()=>{});return()=>{off=true};},[]);
+  useEffect(()=>{let off=false;const n=(v,d)=>v==null?(d??0):Number(v);loadFleetUnits().then(rows=>{if(off||!rows)return;setFleet(rows.map(r=>{const s=r.specs||{};return{id:r.id,plate:r.plate,name:r.name,category:r.category,cat:r.category,year:r.year,make:r.make,model:r.model,status:r.status||"available",daily:n(r.daily),weekly:n(r.weekly),monthly:n(r.monthly),depD:n(r.deposit_daily,200),depW:n(r.deposit_weekly,300),depM:n(r.deposit_monthly,500),depositDaily:n(r.deposit_daily,200),depositWeekly:n(r.deposit_weekly,300),depositMonthly:n(r.deposit_monthly,500),rateMile:n(r.mile_daily),mileDaily:n(r.mile_daily),mileWeekly:n(r.mile_weekly),mileMonthly:n(r.mile_monthly),mileTiers:r.mile_tiers||[],fuelType:r.fuel_type,transmission:s.transmission||"",eqCapacity:s.eqCapacity||"",shortDesc:s.shortDesc||"",type:s.shortDesc||r.model,desc:s.shortDesc||"",photos:(r.media&&r.media.photos)||[],docs:(r.media&&r.media.docs)||[],img:catIcon(r.category)};}));}).catch(()=>{});return()=>{off=true};},[]);
   /* FLIP FASE 1 — hidrata los espacios de almacenamiento desde Supabase. Fail-safe: si falla, se queda el seed. */
   useEffect(()=>{let off=false;loadSpaces().then(rows=>{if(off||!rows)return;setSpaces(rows);}).catch(()=>{});return()=>{off=true};},[]);
   const [contacts,setContacts]=useCollection("contacts",{pk:"id",authKey:user?.email,keyCols:c=>({name:c.name,email:c.email}),seed:[]});
@@ -5127,11 +5145,13 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},cred
   const savedCard=savedPays.find(p=>p.type==="card");
   const savedCash=savedPays.find(p=>p.type==="cash");
   const [payDetail,setPayDetail]=useState({
-    /* Zelle */zelleFrom:"",zelleName:"",zelleAmount:"",zelleReceipt:false,zelleDate:"",zelleTime:"",zelleProof:"",
+    /* Zelle */zelleFrom:"",zelleName:"",zelleAmount:"",zelleReceipt:false,zelleDate:"",zelleTime:"",zelleProof:"",zelleProofUrl:"",zelleProofPath:"",
     /* Card */cardName:"",
     /* Cash */cashName:"",cashPhone:"",cashConfirm:false,cashTime:"",
     /* Invoice */invCompany:"",invTaxId:"",invBillEmail:"",invContact:"",invPhone:"",invAddress:"",invPO:"",
   });
+  const [zProofBusy,setZProofBusy]=useState(false);
+  const [zProofErr,setZProofErr]=useState("");
   const [step,setStep]=useState("review"); // review | payment | redirect | done
   const [cashModal,setCashModal]=useState(false);
   const upPay=(k,v)=>setPayDetail(p=>({...p,[k]:v}));
@@ -5315,8 +5335,10 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},cred
               <div className="ig"><label>Time of Transfer</label><input className="inf" type="time" value={payDetail.zelleTime} onChange={e=>upPay("zelleTime",e.target.value)}/></div>
             </div>
             <div className="ig"><label>Payment receipt (attachment) *</label>
-              <input type="file" accept="image/*,application/pdf" onChange={e=>upPay("zelleProof",e.target.files&&e.target.files[0]?e.target.files[0].name:"")} style={{fontSize:13,padding:"8px 0"}}/>
-              {payDetail.zelleProof&&<div style={{fontSize:12,color:"var(--green)",fontWeight:600,marginTop:4}}>📎 {payDetail.zelleProof} attached</div>}
+              <input type="file" accept="image/*,application/pdf" disabled={zProofBusy} onChange={async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;upPay("zelleProof",f.name);setZProofBusy(true);setZProofErr("");try{const m=await uploadMedia(f,"zelle/proof");upPay("zelleProofUrl",m.url);upPay("zelleProofPath",m.path);}catch(err){setZProofErr("No se pudo adjuntar. Envía el recibo a btoprentals@gmail.com");}finally{setZProofBusy(false);}}} style={{fontSize:13,padding:"8px 0"}}/>
+              {zProofBusy&&<div style={{fontSize:12,color:"var(--navy)",marginTop:4}}>Subiendo…</div>}
+              {zProofErr&&<div style={{fontSize:12,color:"var(--red)",fontWeight:600,marginTop:4}}>{zProofErr}</div>}
+              {payDetail.zelleProof&&!zProofBusy&&<div style={{fontSize:12,color:"var(--green)",fontWeight:600,marginTop:4}}>📎 {payDetail.zelleProof}{payDetail.zelleProofUrl?" adjuntado ✓":" (pendiente)"}</div>}
             </div>
             <label style={{display:"flex",alignItems:"flex-start",gap:12,padding:14,background:payDetail.zelleReceipt?"#D1FAE5":"#fff",borderRadius:10,border:payDetail.zelleReceipt?"2px solid var(--green)":"2px solid var(--g2)",cursor:"pointer"}}>
               <input type="checkbox" checked={payDetail.zelleReceipt} onChange={e=>upPay("zelleReceipt",e.target.checked)} style={{width:18,height:18,accentColor:"var(--green)",marginTop:2}}/>
@@ -5472,7 +5494,7 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
   },[section,alarmActive]);
   const [fleet,setFleetLocal]=useState(admSeedFleet);
   /* Hidrata la flota admin desde Supabase (fuente de verdad), reemplazando el seed. */
-  useEffect(()=>{let off=false;const n=(v,d)=>v==null?(d??0):Number(v);loadFleetUnits().then(rows=>{if(off||!rows)return;setFleetLocal(rows.map(r=>{const s=r.specs||{};return{id:r.id,plate:r.plate,name:r.name,category:r.category,cat:r.category,year:r.year,make:r.make,model:r.model,status:r.status||"available",daily:n(r.daily),weekly:n(r.weekly),monthly:n(r.monthly),depD:n(r.deposit_daily,200),depW:n(r.deposit_weekly,300),depM:n(r.deposit_monthly,500),depositDaily:n(r.deposit_daily,200),depositWeekly:n(r.deposit_weekly,300),depositMonthly:n(r.deposit_monthly,500),rateMile:n(r.mile_daily),mileDaily:n(r.mile_daily),mileWeekly:n(r.mile_weekly),mileMonthly:n(r.mile_monthly),mileTiers:r.mile_tiers||[],fuelType:r.fuel_type,transmission:s.transmission||"",eqCapacity:s.eqCapacity||"",shortDesc:s.shortDesc||"",type:s.shortDesc||r.model,desc:s.shortDesc||"",img:catIcon(r.category)};}));}).catch(()=>{});return()=>{off=true};},[]);
+  useEffect(()=>{let off=false;const n=(v,d)=>v==null?(d??0):Number(v);loadFleetUnits().then(rows=>{if(off||!rows)return;setFleetLocal(rows.map(r=>{const s=r.specs||{};return{id:r.id,plate:r.plate,name:r.name,category:r.category,cat:r.category,year:r.year,make:r.make,model:r.model,status:r.status||"available",daily:n(r.daily),weekly:n(r.weekly),monthly:n(r.monthly),depD:n(r.deposit_daily,200),depW:n(r.deposit_weekly,300),depM:n(r.deposit_monthly,500),depositDaily:n(r.deposit_daily,200),depositWeekly:n(r.deposit_weekly,300),depositMonthly:n(r.deposit_monthly,500),rateMile:n(r.mile_daily),mileDaily:n(r.mile_daily),mileWeekly:n(r.mile_weekly),mileMonthly:n(r.mile_monthly),mileTiers:r.mile_tiers||[],fuelType:r.fuel_type,transmission:s.transmission||"",eqCapacity:s.eqCapacity||"",shortDesc:s.shortDesc||"",type:s.shortDesc||r.model,desc:s.shortDesc||"",photos:(r.media&&r.media.photos)||[],docs:(r.media&&r.media.docs)||[],img:catIcon(r.category)};}));}).catch(()=>{});return()=>{off=true};},[]);
   const setFleet=(updater)=>{
     setFleetLocal(prev=>{
       const next=typeof updater==="function"?updater(prev):updater;
@@ -6636,7 +6658,7 @@ function PostsMod(){
   const [tab,setTab]=useState("list"); // list | editor
   const [delConfirm,setDelConfirm]=useState(null);
 
-  const blank={title:"",slug:"",excerpt:"",body:"",cat:"Fleet",status:"draft",featured:false,tags:[],readTime:2,comments:true,metaTitle:"",metaDesc:"",img:"",author:"Admin BTOP"};
+  const blank={title:"",slug:"",excerpt:"",body:"",cat:"Fleet",status:"draft",featured:false,tags:[],readTime:2,comments:true,metaTitle:"",metaDesc:"",img:"",imgPath:"",author:"Admin BTOP"};
   const [form,setForm]=useState(blank);
   const [tagInput,setTagInput]=useState("");
   const uf=(k,v)=>setForm(p=>({...p,[k]:v}));
@@ -6646,7 +6668,7 @@ function PostsMod(){
   const totalViews=posts.reduce((s,p)=>s+(p.views||0),0);
 
   const startCreate=()=>{setForm(blank);setEditing(null);setCreating(true);setTab("editor")};
-  const startEdit=(p)=>{setForm({title:p.title,slug:p.slug||"",excerpt:p.excerpt,body:p.body||"",cat:p.cat,status:p.status,featured:p.featured,tags:p.tags||[],readTime:p.readTime||2,comments:p.comments!==false,metaTitle:p.metaTitle||"",metaDesc:p.metaDesc||"",img:p.img||"",author:p.author||"Admin BTOP"});setEditing(p);setCreating(false);setTab("editor")};
+  const startEdit=(p)=>{setForm({title:p.title,slug:p.slug||"",excerpt:p.excerpt,body:p.body||"",cat:p.cat,status:p.status,featured:p.featured,tags:p.tags||[],readTime:p.readTime||2,comments:p.comments!==false,metaTitle:p.metaTitle||"",metaDesc:p.metaDesc||"",img:p.img||"",imgPath:p.imgPath||"",author:p.author||"Admin BTOP"});setEditing(p);setCreating(false);setTab("editor")};
 
   const saveDraft=()=>{if(!form.title)return;const post={...form,status:"draft"};doSave(post)};
   const publish=()=>{if(!form.title)return;const post={...form,status:"published"};doSave(post)};
@@ -6734,8 +6756,8 @@ function PostsMod(){
 
           <SC title="Featured Image">
             <div className="flex items-center gap-4 p-6 bg-stone-50 rounded-xl border-2 border-dashed border-stone-200">
-              <div className="w-24 h-24 bg-white rounded-lg border border-stone-200 flex items-center justify-center shrink-0"><ImagePlus className="w-8 h-8 text-stone-300"/></div>
-              <div><div className="text-sm font-medium">Upload Featured Image</div><div className="text-xs text-stone-500 mt-1">Recommended: 1200x630px. JPG or PNG.</div><button className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-stone-200 rounded-lg text-xs mt-2 hover:bg-stone-50"><Upload className="w-3 h-3"/>Choose File</button></div>
+              <div className="w-24 h-24 bg-white rounded-lg border border-stone-200 flex items-center justify-center shrink-0 overflow-hidden">{form.img?<img src={form.img} alt="" className="w-full h-full object-cover"/>:<ImagePlus className="w-8 h-8 text-stone-300"/>}</div>
+              <div className="flex-1"><div className="text-sm font-medium">Upload Featured Image</div><div className="text-xs text-stone-500 mt-1 mb-2">Recommended: 1200x630px. JPG or PNG.</div><div className="flex items-center gap-2"><Uploader prefix="posts/cover" accept="image/*" label={form.img?"Reemplazar":"Choose File"} onUploaded={(m)=>setForm(f=>({...f,img:m.url,imgPath:m.path}))}/>{form.img&&<button onClick={()=>{if(form.imgPath)removeMedia(form.imgPath);setForm(f=>({...f,img:"",imgPath:""}))}} className="p-2 hover:bg-red-50 text-red-500 rounded-lg"><Trash2 className="w-4 h-4"/></button>}</div></div>
             </div>
           </SC>
 
