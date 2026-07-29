@@ -575,7 +575,7 @@ function DetailedFleetMod({fleet,bookings=[],setFleet}){
 
   const getUnitCode=(v)=>v.plate||`UNIT-${v.id}`;
   const getBookings=(v)=>bookings.filter(b=>b.vid===v.id);
-  const getNow=(v)=>{const now=td.toISOString().split("T")[0];return bookings.find(b=>b.vid===v.id&&b.requestStatus!=="pending_approval"&&b.start<=now&&b.end>=now)};
+  const getNow=(v)=>{const now=td.toISOString().split("T")[0];const b=bookings.find(b=>b.vid===v.id&&b.requestStatus!=="pending_approval"&&b.start<=now&&b.end>=now);if(b)return b;if(v.status==="maintenance"||v.status==="out_of_service")return{type:"maintenance",reason:v.status==="out_of_service"?"Out of Service":"In maintenance",start:now,end:now,_status:true};return null};
 
   /* Get unique product models for the "base" selector */
   const uniqueModels=[...new Set(fleet.map(v=>`${v.year} ${v.name} [${v.category}]`))];
@@ -2343,8 +2343,25 @@ function UsersMod({users,setUsers,roles,setRoles}){
   const [editingUser,setEditingUser]=useState(null);
   const [resetSent,setResetSent]=useState("");
 
-  const sendReset=(u)=>{setResetSent(u.email);setUsers(p=>p.map(x=>x.id===u.id?{...x,resetSentAt:new Date().toISOString()}:x));setTimeout(()=>setResetSent(s=>s===u.email?"":s),3500)};
-  const sendInvite=()=>{if(!invEmail)return;const nu={id:nid(),name:invEmail.split("@")[0],email:invEmail,role:invRole,status:"active",last:"just now",initials:invEmail.substring(0,2).toUpperCase()};setUsers(p=>[...p,nu]);setInvEmail("");setInviting(false)};
+  const sendReset=(u)=>{
+    setResetSent(u.email);
+    /* Envía un correo REAL de recuperación de contraseña (Supabase Auth → SMTP/Resend) */
+    if(isSupabaseConfigured&&supabase){supabase.auth.resetPasswordForEmail(u.email,{redirectTo:location.origin+location.pathname}).then(({error})=>{if(error)console.warn("[reset]",error.message)});}
+    setTimeout(()=>setResetSent(s=>s===u.email?"":s),3500);
+  };
+  const [invErr,setInvErr]=useState("");const [invBusy,setInvBusy]=useState(false);
+  const roleToKey={"Super Admin":"admin","Fleet Manager":"sede","Sales Rep":"sales","Client":"client"};
+  const sendInvite=async()=>{
+    if(!invEmail)return;
+    if(!(isSupabaseConfigured&&supabase)){setInvErr("Invitaciones requieren Supabase configurado.");return;}
+    setInvBusy(true);setInvErr("");
+    try{
+      const {data,error}=await supabase.functions.invoke("invite-staff",{body:{email:invEmail.trim(),role:roleToKey[invRole]||"sales",name:invEmail.split("@")[0],redirectTo:location.origin+location.pathname}});
+      if(error||data?.error){setInvErr((data&&data.error)||error.message||"No se pudo invitar");setInvBusy(false);return;}
+      setInvBusy(false);setInvEmail("");setInviting(false);
+      setUsers(p=>[...p.filter(x=>x.email!==invEmail.trim()),{id:invEmail.trim(),name:invEmail.split("@")[0],email:invEmail.trim(),role:invRole,status:"invited",last:"—",initials:invEmail.substring(0,2).toUpperCase()}]);
+    }catch(e){setInvErr(String(e?.message||e));setInvBusy(false);}
+  };
   const updateRole=(uid,role)=>setUsers(p=>p.map(u=>u.id===uid?{...u,role}:u));
   const toggleStatus=(uid)=>setUsers(p=>p.map(u=>u.id===uid?{...u,status:u.status==="active"?"inactive":"active"}:u));
   const updatePerm=(rid,pi,val)=>setRoles(p=>p.map(r=>r.id===rid?{...r,perms:r.perms.map((v,i)=>i===pi?val:v)}:r));
