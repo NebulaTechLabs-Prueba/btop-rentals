@@ -27,6 +27,7 @@ jobs:
             cat > .env.local <<EOF
             VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
             VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
+            VITE_SUPABASE_PROXY=true
             EOF
             npm ci
             npm run build
