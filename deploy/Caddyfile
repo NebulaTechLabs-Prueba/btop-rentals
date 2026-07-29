@@ -18,6 +18,16 @@ btop-rentals.com {
 		rewrite * /functions/v1/stripe-webhook
 		reverse_proxy https://onpvhedeinpsggdanylg.supabase.co {
 			header_up Host onpvhedeinpsggdanylg.supabase.co
+			# Elimina cabeceras de respuesta que revelarían el proveedor del backend
+			# (visibles p.ej. en los logs de webhook de Stripe).
+			header_down -X-Served-By
+			header_down -X-Deno-Execution-Id
+			header_down -X-Deno-Ray
+			header_down -Set-Cookie
+			header_down -Server
+			header_down -Via
+			header_down -Sb-Gateway-Version
+			header_down -X-Sb-Edge-Region
 		}
 	}
 
