@@ -4,6 +4,23 @@
 # Requisito: los registros DNS A/AAAA de btop-rentals.com y www ya deben apuntar
 # a la IP del server (Caddy valida el dominio para emitir el certificado).
 
+# Snippet: reenvía a la API de Supabase ocultando el proveedor.
+# Elimina cabeceras de respuesta que revelarían el backend (Supabase/Deno) — visibles
+# p.ej. en la pestaña de red del navegador o en los logs de webhook de Stripe.
+(sbproxy) {
+	reverse_proxy https://onpvhedeinpsggdanylg.supabase.co {
+		header_up Host onpvhedeinpsggdanylg.supabase.co
+		header_down -X-Served-By
+		header_down -X-Deno-Execution-Id
+		header_down -X-Deno-Ray
+		header_down -Set-Cookie
+		header_down -Server
+		header_down -Via
+		header_down -Sb-Gateway-Version
+		header_down -X-Sb-Edge-Region
+	}
+}
+
 # www → apex (301)
 www.btop-rentals.com {
 	redir https://btop-rentals.com{uri} permanent
@@ -12,23 +29,17 @@ www.btop-rentals.com {
 btop-rentals.com {
 	encode gzip zstd
 
-	# Webhook de pagos bajo el dominio propio (oculta el proveedor del backend).
-	# Reenvía el cuerpo tal cual (la verificación de firma del pago necesita el raw body).
+	# Webhook de pagos: alias propio -> función específica (raw body intacto para la firma).
 	handle /api/stripe/webhook {
 		rewrite * /functions/v1/stripe-webhook
-		reverse_proxy https://onpvhedeinpsggdanylg.supabase.co {
-			header_up Host onpvhedeinpsggdanylg.supabase.co
-			# Elimina cabeceras de respuesta que revelarían el proveedor del backend
-			# (visibles p.ej. en los logs de webhook de Stripe).
-			header_down -X-Served-By
-			header_down -X-Deno-Execution-Id
-			header_down -X-Deno-Ray
-			header_down -Set-Cookie
-			header_down -Server
-			header_down -Via
-			header_down -Sb-Gateway-Version
-			header_down -X-Sb-Edge-Region
-		}
+		import sbproxy
+	}
+
+	# Enmascarado del backend: toda la API de Supabase (rest/auth/storage/functions/realtime)
+	# bajo el dominio propio. `handle_path` quita el prefijo /api antes de reenviar.
+	# El cliente supabase-js apunta a `${origin}/api` cuando VITE_SUPABASE_PROXY=true.
+	handle_path /api/* {
+		import sbproxy
 	}
 
 	# App
