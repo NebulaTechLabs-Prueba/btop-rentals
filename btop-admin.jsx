@@ -977,9 +977,10 @@ function MaintenanceMod({fleet,spaces,bookings=[],setBookings,onViewUnit}){
       <div className="mt-6"><h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">{tab==="fleet"?"Fleet":"Storage"} Status Overview</h3>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           {(tab==="fleet"?fleet:spaces).map(item=>{
-            const vid=item.id;const inMaint=bookings.some(b=>b.vid===vid&&b.type==="maintenance"&&b.start<=now&&b.end>=now);
+            const vid=item.id;const inMaint=item.status==="maintenance"||bookings.some(b=>b.vid===vid&&b.type==="maintenance"&&b.start<=now&&b.end>=now);
+            const oos=item.status==="out_of_service";
             const inRent=bookings.some(b=>b.vid===vid&&b.type==="rental"&&b.start<=now&&b.end>=now);
-            const st=inMaint?{c:"#DC2626",l:"Maintenance",bg:"#FEE2E2"}:inRent?{c:"#F59E0B",l:"Rented",bg:"#FEF3C7"}:{c:"#10b981",l:"Available",bg:"#D1FAE5"};
+            const st=oos?{c:"#991B1B",l:"Out of Service",bg:"#FEE2E2"}:inMaint?{c:"#DC2626",l:"Maintenance",bg:"#FEE2E2"}:inRent?{c:"#F59E0B",l:"Rented",bg:"#FEF3C7"}:{c:"#10b981",l:"Available",bg:"#D1FAE5"};
             return <div key={vid} className="flex items-center gap-3 p-3 bg-white border border-stone-200 rounded-xl">
               <div className="w-2.5 h-2.5 rounded-full" style={{background:st.c}}/>
               <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate">{item.name||item.year+" "+item.name}</div><div className="text-[10px] text-stone-400 font-mono">{item.plate||item.id}</div></div>
@@ -2761,6 +2762,7 @@ const dateToStr=(d)=>d instanceof Date?`${d.getFullYear()}-${String(d.getMonth()
 /* Active statuses that consume inventory (block the unit). Cancelled/Completed don't consume. */
 const LIVE_ORDER_STATUSES=["Reserved","Confirmed","Active","Delivered","Pending"];
 const unitFreeInRange=(unit,bookings,sd,ed,cart=[],orders=[])=>{
+  if(unit&&(unit.status==="maintenance"||unit.status==="out_of_service"))return false; /* fuera de servicio → no reservable */
   if(!sd||!ed)return true;
   const sStr=dateToStr(sd),eStr=dateToStr(ed);
   if(bookings.some(b=>b.vid===unit.id&&b.requestStatus!=="pending_approval"&&b.start<=eStr&&b.end>=sStr))return false;
@@ -2769,6 +2771,7 @@ const unitFreeInRange=(unit,bookings,sd,ed,cart=[],orders=[])=>{
   return true;
 };
 const unitFreeToday=(unit,bookings,cart=[],orders=[])=>{
+  if(unit&&(unit.status==="maintenance"||unit.status==="out_of_service"))return false; /* fuera de servicio → no reservable */
   const today=new Date().toISOString().split("T")[0];
   if(bookings.some(b=>b.vid===unit.id&&b.requestStatus!=="pending_approval"&&b.start<=today&&b.end>=today))return false;
   if(cart.some(c=>c.uid===unit.id&&c.sd&&c.ed&&dateToStr(c.sd)<=today&&dateToStr(c.ed)>=today))return false;
