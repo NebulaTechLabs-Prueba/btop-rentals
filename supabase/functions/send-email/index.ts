@@ -68,6 +68,10 @@ function build(type: string, d: any) {
       // Invitación de cuenta (cliente o staff). El enlace va bajo el dominio propio (no expone el backend).
       return { subject: 'You’re invited to BTOP Rentals', badge: { text: 'INVITATION', bg: '#1E3A5F', fg: '#DBEAFE' },
         body: H('You’re invited') + P(`Hi ${esc(d.name || '')}, you’ve been invited to create your BTOP Rentals account${d.role_label ? ` as <strong>${esc(d.role_label)}</strong>` : ''}. Click below to set your password and activate it.`) + btn(d.invite_url || '#', 'Activate account') + P('If the button doesn’t work, copy and paste this link into your browser:') + `<p style="margin:0 0 20px;font-size:13px;line-height:1.5;color:${B.blue};word-break:break-all;">${esc(d.invite_url || '')}</p>` };
+    case 'password-reset':
+      // Recuperación de contraseña por flujo propio. Enlace bajo el dominio propio (no expone el backend).
+      return { subject: 'Reset your BTOP Rentals password', badge: { text: 'PASSWORD RESET', bg: '#7C2D12', fg: '#FFEDD5' },
+        body: H('Reset your password') + P(`Hi ${esc(d.name || '')}, we received a request to reset your password. Click below to choose a new one. This link expires in 1 hour and can be used once.`) + btn(d.reset_url || '#', 'Reset password') + P('If the button doesn’t work, copy and paste this link into your browser:') + `<p style="margin:0 0 20px;font-size:13px;line-height:1.5;color:${B.blue};word-break:break-all;">${esc(d.reset_url || '')}</p>` + P('If you didn’t request this, you can safely ignore this email.') };
     default:
       return null;
   }

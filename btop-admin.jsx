@@ -1684,7 +1684,7 @@ function ContactsMod({contacts:propContacts,setContacts:propSetContacts,orders=[
   const sendResetLink=()=>{
     setPwErr("");
     /* Envía un correo REAL de recuperación (Supabase Auth) */
-    if(isSupabaseConfigured&&supabase&&viewing?.email){supabase.auth.resetPasswordForEmail(viewing.email,{redirectTo:location.origin+location.pathname}).then(({error})=>{if(error)console.warn("[reset]",error.message)});}
+    if(isSupabaseConfigured&&supabase&&viewing?.email){supabase.functions.invoke("request-reset",{body:{email:viewing.email,base:location.origin+location.pathname}}).catch(()=>{});}
     setPwSent(true);
     setContacts(p=>p.map(c=>c.id===viewing.id?{...c,resetSentAt:new Date().toISOString()}:c));
     setTimeout(()=>setPwSent(false),3500);
@@ -2393,7 +2393,7 @@ function UsersMod({users,setUsers,roles,setRoles}){
   const sendReset=(u)=>{
     setResetSent(u.email);
     /* Envía un correo REAL de recuperación de contraseña (Supabase Auth → SMTP/Resend) */
-    if(isSupabaseConfigured&&supabase){supabase.auth.resetPasswordForEmail(u.email,{redirectTo:location.origin+location.pathname}).then(({error})=>{if(error)console.warn("[reset]",error.message)});}
+    if(isSupabaseConfigured&&supabase){supabase.functions.invoke("request-reset",{body:{email:u.email,base:location.origin+location.pathname}}).catch(()=>{});}
     setTimeout(()=>setResetSent(s=>s===u.email?"":s),3500);
   };
   const [invErr,setInvErr]=useState("");const [invBusy,setInvBusy]=useState(false);const [invLink,setInvLink]=useState("");
@@ -3913,6 +3913,42 @@ function InvitePage({token,invite,onAccept,sv}){
   </div>;
 }
 
+/* Página de reset de contraseña por flujo propio (?reset=TOKEN → confirm-reset). Sin GoTrue. */
+function ResetPasswordPage({token,sv}){
+  const [pw,setPw]=useState("");const [pw2,setPw2]=useState("");const [err,setErr]=useState("");
+  const [busy,setBusy]=useState(false);const [done,setDone]=useState(false);
+  const go=async()=>{
+    if(pw.length<8){setErr("Password must be at least 8 characters");return}
+    if(pw!==pw2){setErr("Passwords do not match");return}
+    setErr("");setBusy(true);
+    try{
+      const {data,error}=await supabase.functions.invoke("confirm-reset",{body:{token,password:pw}});
+      if(error||data?.error){setErr((data&&data.error)||"This reset link is invalid or expired.");setBusy(false);return}
+      setDone(true);
+    }catch(e){setErr(String(e?.message||e));}
+    setBusy(false);
+  };
+  return <div className="fi" style={{minHeight:"80vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"linear-gradient(135deg,var(--b0),var(--g0))"}}>
+    <div className="cd" style={{maxWidth:440,width:"100%",padding:40}}>
+      {done?<div style={{textAlign:"center"}}>
+        <div style={{fontSize:48,marginBottom:12}}>✅</div>
+        <h2 style={{fontSize:22,fontWeight:800,color:"var(--navy)",marginBottom:8}}>Password updated</h2>
+        <p style={{color:"var(--g5)",fontSize:14,marginBottom:20}}>Your password has been changed. You can now sign in with your new password.</p>
+        <button onClick={()=>sv("login")} className="btn bp blg" style={{width:"100%",justifyContent:"center"}}>Go to sign in</button>
+      </div>:<div>
+        <div style={{textAlign:"center",marginBottom:24}}><div style={{width:60,height:60,borderRadius:16,background:"linear-gradient(135deg,var(--orange),#F97316)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><X n="lock" s={28} c="#fff"/></div><h2 style={{fontSize:22,fontWeight:800,color:"var(--navy)"}}>Set a new password</h2><p style={{fontSize:13,color:"var(--g5)",marginTop:6}}>Choose a new password for your BTOP Rentals account.</p></div>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div className="ig"><label>New password</label><input className="inf" type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Min 8 characters"/></div>
+          <div className="ig"><label>Confirm password</label><input className="inf" type="password" value={pw2} onChange={e=>setPw2(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}/></div>
+          {err&&<div style={{padding:"10px 14px",borderRadius:10,fontSize:13,fontWeight:600,background:"rgba(220,38,38,.1)",color:"var(--red)"}}>{err}</div>}
+          <button onClick={go} disabled={busy} className="btn bp blg" style={{width:"100%",justifyContent:"center",opacity:busy?.6:1}}>{busy?"Updating…":"Update password"}</button>
+          <p style={{fontSize:11,color:"var(--g5)",textAlign:"center"}}>This is a one-time link and expires in 1 hour.</p>
+        </div>
+      </div>}
+    </div>
+  </div>;
+}
+
 /* ═══════════════ APP ═══════════════ */
 export default function App(){
   const [view,setView]=useState("home");
@@ -4034,8 +4070,9 @@ export default function App(){
   const [invites,setInvites]=usePersistentState("btop_invites",[]);
   const [magicLink,setMagicLink]=useState(null);
   const [inviteToken,setInviteToken]=useState(null);
+  const [resetToken,setResetToken]=useState(null);
   /* On load, honor a ?invite=TOKEN magic link */
-  useEffect(()=>{try{const tk=new URLSearchParams(window.location.search).get("invite");if(tk){setInviteToken(tk);setView("invite")}}catch(e){}},[]);
+  useEffect(()=>{try{const q=new URLSearchParams(window.location.search);const tk=q.get("invite");if(tk){setInviteToken(tk);setView("invite")}const rk=q.get("reset");if(rk){setResetToken(rk);setView("reset")}}catch(e){}},[]);
   /* Company profile — single source of truth for contact details (editable in Settings) */
   const [company,setCompany]=useSetting("company",{name:"BTOP Rentals",address:"9807 Mines Rd #9, Laredo TX 78045",phone:"+1 469 690 712",email:"btoprentals@gmail.com",hours:"Mon–Fri 7AM–6PM · Sat 8AM–2PM"});
   /* Saved payment methods per client email (shared so checkout can prefill from the client's dashboard) */
@@ -4496,6 +4533,7 @@ html,body{overflow-x:hidden;max-width:100%}body{font-family:var(--f);background:
         <button onClick={()=>{setOnBehalf(null);setView("sales")}} style={{background:"rgba(255,255,255,.12)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:20,padding:"6px 14px",fontWeight:600,fontSize:12,cursor:"pointer"}}>Cancel</button>
       </div>}
       {view==="invite"&&<InvitePage token={inviteToken} invite={invites.find(i=>i.token===inviteToken)} onAccept={async(pw)=>{const ok=await acceptInvite(inviteToken,pw);if(ok)setView("client");}} sv={setView}/>}
+      {view==="reset"&&<ResetPasswordPage token={resetToken} sv={setView}/>}
       {view==="checkout"&&user&&<CheckoutPage cart={cart} rmCart={rmCart} cTotal={cTotal} user={user} confirm={confirmOrder} cancel={()=>setView("home")} sv={setView} company={company} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} creditUsed={orders.filter(o=>(o.payMethod==="credit"||o.payMethod==="invoice")&&o.ue===user.email&&o.status!=="Cancelled"&&!o.settlementPaid).reduce((s,o)=>s+(o.tp||0),0)} savedPays={savedPays} mySignature={mySignature} saveMySignature={saveMySignature}/>}
       {view==="client"&&user?.role==="client"&&<Cl orders={orders.filter(o=>o.ue===user.email)} sv={setView} user={user} contacts={contacts} setContacts={setContacts} logout={logout} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} orders_all={orders} savedPays={savedPays} setSavedPays={setSavedPays} t={t} clientDocs={clientDocs} addClientDoc={addClientDoc} removeClientDoc={removeClientDoc} depositReturnPref={depositReturnPref} setDepositReturnPref={setDepositReturnPref} mySignature={mySignature} saveMySignature={saveMySignature} clientProfile={clientProfile} saveClientProfile={saveClientProfile}/>}
     </main>
@@ -5558,7 +5596,7 @@ function Re({dr,sv}){const [nm,snm]=useState("");const [em,sem]=useState("");con
     </div>
   </div>;
 }
-function Fo({t,sv}){const [em,sem]=useState("");const [sent,ss]=useState(false);const [busy,setBusy]=useState(false);const go=async()=>{if(!em||busy)return;setBusy(true);try{if(isSupabaseConfigured&&supabase){const {error}=await supabase.auth.resetPasswordForEmail(em.trim(),{redirectTo:location.origin+location.pathname});if(error){t(error.message||"Could not send the reset link","error");setBusy(false);return}}ss(true);t("Reset link sent!")}catch(e){t(String(e?.message||e),"error")}setBusy(false)};
+function Fo({t,sv}){const [em,sem]=useState("");const [sent,ss]=useState(false);const [busy,setBusy]=useState(false);const go=async()=>{if(!em||busy)return;setBusy(true);try{if(isSupabaseConfigured&&supabase){const {data,error}=await supabase.functions.invoke("request-reset",{body:{email:em.trim(),base:location.origin+location.pathname}});if(error||data?.error){t((data&&data.error)||error.message||"Could not send the reset link","error");setBusy(false);return}}ss(true);t("Reset link sent!")}catch(e){t(String(e?.message||e),"error")}setBusy(false)};
   return <div className="fi" style={{minHeight:"80vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"linear-gradient(135deg,var(--b0),var(--g0))"}}>
     <div className="cd" style={{maxWidth:440,width:"100%",padding:40}}>
       <div style={{textAlign:"center",marginBottom:32}}><div style={{width:60,height:60,borderRadius:16,background:"linear-gradient(135deg,var(--orange),#F97316)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><X n="mail" s={28} c="#fff"/></div><h2 style={{fontSize:24,fontWeight:800,color:"var(--navy)"}}>Forgot Password?</h2></div>
