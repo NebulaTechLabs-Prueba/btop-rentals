@@ -2380,9 +2380,30 @@ function UsersMod({users,setUsers,roles,setRoles}){
       setUsers(p=>[...p.filter(x=>x.email!==invEmail.trim()),{id:invEmail.trim(),name:invEmail.split("@")[0],email:invEmail.trim(),role:invRole,status:"invited",last:"—",initials:invEmail.substring(0,2).toUpperCase()}]);
     }catch(e){setInvErr(String(e?.message||e));setInvBusy(false);}
   };
-  const updateRole=(uid,role)=>setUsers(p=>p.map(u=>u.id===uid?{...u,role}:u));
-  const toggleStatus=(uid)=>setUsers(p=>p.map(u=>u.id===uid?{...u,status:u.status==="active"?"inactive":"active"}:u));
+  const [userMsg,setUserMsg]=useState("");
+  const flash=(m)=>{setUserMsg(m);setTimeout(()=>setUserMsg(s=>s===m?"":s),3500);};
+  const callAdmin=async(body)=>{
+    if(!(isSupabaseConfigured&&supabase))throw new Error("Requiere Supabase configurado.");
+    const {data,error}=await supabase.functions.invoke("admin-user",{body});
+    if(error||data?.error)throw new Error((data&&data.error)||error.message||"Operación fallida");
+    return data;
+  };
+  const updateRole=async(u,role)=>{
+    const prev=u.role;setUsers(p=>p.map(x=>x.id===u.id?{...x,role}:x));
+    try{await callAdmin({action:"role",email:u.email,role:roleToKey[role]||"sales"});flash(`Rol de ${u.email} → ${role}`);}
+    catch(e){setUsers(p=>p.map(x=>x.id===u.id?{...x,role:prev}:x));flash("No se pudo cambiar el rol: "+e.message);}
+  };
+  const toggleStatus=async(u)=>{
+    const next=u.status==="active"?"inactive":"active";
+    setUsers(p=>p.map(x=>x.id===u.id?{...x,status:next}:x));
+    try{await callAdmin({action:"status",email:u.email,active:next==="active"});flash(`${u.email} ${next==="active"?"reactivado":"desactivado"}`);}
+    catch(e){setUsers(p=>p.map(x=>x.id===u.id?{...x,status:u.status}:x));flash("No se pudo cambiar el estado: "+e.message);}
+  };
   const updatePerm=(rid,pi,val)=>setRoles(p=>p.map(r=>r.id===rid?{...r,perms:r.perms.map((v,i)=>i===pi?val:v)}:r));
+  /* CRUD de roles (grupos de permisos del panel; RLS sigue siendo la barrera real) */
+  const [newRole,setNewRole]=useState("");
+  const addRole=()=>{const n=newRole.trim();if(!n)return;if(roles.some(r=>r.name.toLowerCase()===n.toLowerCase())){flash("Ya existe un rol con ese nombre");return;}setRoles(p=>[...p,{id:"r"+Date.now(),name:n,scope:"Custom",perms:[0,0,0,0,0,0]}]);setNewRole("");flash(`Rol "${n}" creado`);};
+  const deleteRole=(r)=>{if(r.name==="Super Admin"){flash("Super Admin está bloqueado");return;}const inUse=users.filter(u=>u.role===r.name).length;if(inUse){flash(`No se puede eliminar: ${inUse} usuario(s) con este rol`);return;}setRoles(p=>p.filter(x=>x.id!==r.id));flash(`Rol "${r.name}" eliminado`);};
 
   return (
     <div>
@@ -2406,6 +2427,7 @@ function UsersMod({users,setUsers,roles,setRoles}){
         <div className="flex gap-1 bg-white border border-stone-200 rounded-full p-1"><button onClick={()=>setTab("users")} className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm ${tab==="users"?"bg-blue-900 text-white":"text-stone-600"}`}><Users className="w-4 h-4"/>Users</button><button onClick={()=>setTab("roles")} className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm ${tab==="roles"?"bg-blue-900 text-white":"text-stone-600"}`}><Shield className="w-4 h-4"/>Roles</button></div>
         {tab==="users"&&<button onClick={()=>setInviting(true)} className="inline-flex items-center gap-2 bg-blue-900 text-white px-4 py-2 rounded-full text-sm hover:bg-blue-700"><Mail className="w-4 h-4"/>Invite by Email</button>}
       </div>
+      {userMsg&&<div className="mb-4 px-4 py-2.5 rounded-xl text-sm bg-blue-50 text-blue-800 border border-blue-200">{userMsg}</div>}
 
       {/* INVITE MODAL */}
       {inviting&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"><div className="bg-white w-full max-w-md rounded-2xl p-6">
@@ -2422,15 +2444,16 @@ function UsersMod({users,setUsers,roles,setRoles}){
         const isSA=u.role==="Super Admin";
         return [
         <div className="flex items-center gap-3"><div className="w-9 h-9 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-xs font-semibold">{u.initials}</div><div><div className="font-medium">{u.name}{isSA&&<Lock className="w-3 h-3 inline ml-1 text-amber-500"/>}</div><div className="text-xs text-stone-500">{u.email}</div></div></div>,
-        isSA?<span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded-lg">Super Admin (locked)</span>:<select value={u.role} onChange={e=>updateRole(u.id,e.target.value)} className="text-xs px-2 py-1 border border-stone-200 rounded-lg">{roles.filter(r=>r.name!=="Super Admin").map(r=>(<option key={r.name} value={r.name}>{r.name}</option>))}</select>,
+        isSA?<span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded-lg">Super Admin (locked)</span>:<select value={u.role} onChange={e=>updateRole(u,e.target.value)} className="text-xs px-2 py-1 border border-stone-200 rounded-lg">{roles.filter(r=>r.name!=="Super Admin").map(r=>(<option key={r.name} value={r.name}>{r.name}</option>))}</select>,
         <span className="text-xs text-stone-500">{u.last}</span>,
-        isSA?<Pill tone="emerald">active (protected)</Pill>:<button onClick={()=>toggleStatus(u.id)}><Pill tone={u.status==="active"?"emerald":"stone"}>{u.status}</Pill></button>,
+        isSA?<Pill tone="emerald">active (protected)</Pill>:<button onClick={()=>toggleStatus(u)}><Pill tone={u.status==="active"?"emerald":"stone"}>{u.status}</Pill></button>,
         resetSent===u.email?<span className="text-xs font-semibold text-emerald-700 inline-flex items-center gap-1">✓ Reset link sent</span>:<button onClick={()=>sendReset(u)} className="text-xs font-semibold text-blue-700 border border-blue-200 hover:bg-blue-50 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5">📨 Send reset link</button>,
       ]})}/></SC>}
 
       {tab==="roles"&&<div className="space-y-4">
-        <SC title="Permission Matrix" padded={false}><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-stone-200"><th className="text-left px-5 py-3 text-[11px] font-medium text-stone-500 uppercase">Role</th><th className="text-left px-3 py-3 text-[11px] font-medium text-stone-500 uppercase">Scope</th>{PERMS.map(p=>(<th key={p} className="px-3 py-3 text-[11px] font-medium text-stone-500 uppercase text-center">{p}</th>))}</tr></thead>
-          <tbody>{roles.map(r=>{const locked=r.name==="Super Admin";return (<tr key={r.id} className={`border-b border-stone-100 hover:bg-stone-50 ${locked?"bg-amber-50/30":""}`}><td className="px-5 py-3 font-medium">{r.name}{locked&&<Lock className="w-3 h-3 inline ml-1 text-amber-500"/>}</td><td className="px-3 py-3 text-stone-600 text-xs">{r.scope}</td>{r.perms.map((p,i)=>(<td key={i} className="px-3 py-3 text-center">{locked?<span className="text-xs font-semibold text-emerald-700">Admin</span>:<select value={p} onChange={e=>updatePerm(r.id,i,Number(e.target.value))} className="text-xs px-1 py-0.5 border border-stone-200 rounded">{[0,1,2,3].map(v=>(<option key={v} value={v}>{v===0?"None":v===1?"Read":v===2?"Edit":"Admin"}</option>))}</select>}</td>))}</tr>);})}</tbody>
+        <div className="flex items-center gap-2 flex-wrap"><div className="w-full max-w-xs"><Inp value={newRole} onChange={setNewRole} placeholder="Nombre del nuevo rol (ej. Warehouse Lead)"/></div><button onClick={addRole} disabled={!newRole.trim()} className="inline-flex items-center gap-2 bg-blue-900 text-white px-4 py-2 rounded-full text-sm hover:bg-blue-700 disabled:opacity-40"><Plus className="w-4 h-4"/>Crear rol</button></div>
+        <SC title="Permission Matrix" padded={false}><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-stone-200"><th className="text-left px-5 py-3 text-[11px] font-medium text-stone-500 uppercase">Role</th><th className="text-left px-3 py-3 text-[11px] font-medium text-stone-500 uppercase">Scope</th>{PERMS.map(p=>(<th key={p} className="px-3 py-3 text-[11px] font-medium text-stone-500 uppercase text-center">{p}</th>))}<th className="px-3 py-3"></th></tr></thead>
+          <tbody>{roles.map(r=>{const locked=r.name==="Super Admin";const inUse=users.filter(u=>u.role===r.name).length;return (<tr key={r.id} className={`border-b border-stone-100 hover:bg-stone-50 ${locked?"bg-amber-50/30":""}`}><td className="px-5 py-3 font-medium">{r.name}{locked&&<Lock className="w-3 h-3 inline ml-1 text-amber-500"/>}</td><td className="px-3 py-3 text-stone-600 text-xs">{r.scope}</td>{r.perms.map((p,i)=>(<td key={i} className="px-3 py-3 text-center">{locked?<span className="text-xs font-semibold text-emerald-700">Admin</span>:<select value={p} onChange={e=>updatePerm(r.id,i,Number(e.target.value))} className="text-xs px-1 py-0.5 border border-stone-200 rounded">{[0,1,2,3].map(v=>(<option key={v} value={v}>{v===0?"None":v===1?"Read":v===2?"Edit":"Admin"}</option>))}</select>}</td>))}<td className="px-3 py-3 text-center">{locked?<Lock className="w-3.5 h-3.5 text-stone-300 inline"/>:<button onClick={()=>deleteRole(r)} disabled={inUse>0} title={inUse>0?`${inUse} usuario(s) usan este rol`:"Eliminar rol"} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent"><Trash2 className="w-4 h-4"/></button>}</td></tr>);})}</tbody>
         </table></div></SC>
         <div className="flex gap-4 text-xs text-stone-500 px-2 flex-wrap"><span className="flex items-center gap-1.5"><PL level={0}/>None</span><span className="flex items-center gap-1.5"><PL level={1}/>Read</span><span className="flex items-center gap-1.5"><PL level={2}/>Edit</span><span className="flex items-center gap-1.5"><PL level={3}/>Admin</span><span className="flex items-center gap-1.5 ml-4"><Lock className="w-3 h-3 text-amber-500"/>Super Admin is locked</span></div>
       </div>}
@@ -5506,9 +5529,9 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
   /* Persiste ediciones de espacios (campos propios) a Supabase; las rentas viven aparte. */
   const setSpacesPersist=(updater)=>{setSpaces(prev=>{const next=typeof updater==="function"?updater(prev):updater;syncSpaces(prev,next);return next;});};
   const [users,setUsers]=useState([]);
-  const [roles,setRoles]=useState(admSeedRoles);
+  const [roles,setRoles]=useSetting("admin_roles",admSeedRoles);
   /* Lista de STAFF desde Supabase (profiles). Los clientes se gestionan en Contacts, no aquí. */
-  useEffect(()=>{if(!supabase)return;loadProfiles().then(ps=>{if(ps)setUsers(ps.filter(p=>p.role!=="client").map(p=>({id:p.email,name:p.name,email:p.email,role:p.role==="admin"?"Super Admin":p.role==="sede"?"Fleet Manager":p.role==="sales"?"Sales Rep":p.role,status:"active",last:"—",initials:(p.name||p.email).slice(0,2).toUpperCase()})))}).catch(()=>{})},[]);
+  useEffect(()=>{if(!supabase)return;loadProfiles().then(ps=>{if(ps)setUsers(ps.filter(p=>p.role!=="client").map(p=>({id:p.email,name:p.name,email:p.email,role:p.role==="admin"?"Super Admin":p.role==="sede"?"Fleet Manager":p.role==="sales"?"Sales Rep":p.role,status:p.disabled?"inactive":"active",last:"—",initials:(p.name||p.email).slice(0,2).toUpperCase()})))}).catch(()=>{})},[]);
   const [gateways,setGateways]=useSetting("payment_gateways",{
     stripe:{connected:false,pubKey:"",secretKey:"",webhookSecret:"",mode:"test"},
     zelle:{enabled:true,email:"btoprentals@gmail.com",instructions:"Send your Zelle transfer and upload the receipt for verification."},
