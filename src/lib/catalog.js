@@ -1,5 +1,25 @@
 import { supabase } from './supabase.js';
 
+// ── Roles con capacidades (tabla `roles`) ──
+export async function loadRoles() {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.from('roles').select('*').order('is_system', { ascending: false }).order('name');
+    if (error || !Array.isArray(data)) return null;
+    return data;
+  } catch { return null; }
+}
+export async function upsertRole(role) {
+  if (!supabase) return { error: 'no supabase' };
+  try { const { error } = await supabase.from('roles').upsert(role, { onConflict: 'key' }); return { error }; }
+  catch (e) { return { error: e }; }
+}
+export async function deleteRoleRow(key) {
+  if (!supabase) return { error: 'no supabase' };
+  try { const { error } = await supabase.from('roles').delete().eq('key', key); return { error }; }
+  catch (e) { return { error: e }; }
+}
+
 // Carga los perfiles (staff/usuarios) desde Supabase. Público-legible (nombres).
 export async function loadProfiles() {
   if (!supabase) return null;

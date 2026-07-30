@@ -15,7 +15,16 @@ Deno.serve(async (req: Request) => {
     const { data: invRows } = await admin.from('invites').select('*').eq('token', token).eq('status', 'active').limit(1);
     const inv = (invRows || [])[0];
     if (!inv || !inv.email) return json({ error: 'Esta invitación es inválida o ya fue usada. Solicita una nueva.' }, 400);
-    const role = inv.role || 'client';
+    const roleKey = inv.role || 'client';
+    // Resolver el base (panel) del rol. Defensa: nunca activar como admin total vía invitación.
+    let base = 'client';
+    if (roleKey !== 'client') {
+      const { data: roleRow } = await admin.from('roles').select('base').eq('key', roleKey).maybeSingle();
+      base = roleRow?.base || 'sales';
+    }
+    const role = base === 'admin' ? 'sales' : roleKey;                 // key que se guarda en profiles
+    const effBase = base === 'admin' ? 'sales' : base;                 // panel efectivo
+    const jwtRole = effBase === 'sede' ? 'sede' : effBase === 'client' ? 'client' : 'sales'; // office→sales
 
     // Reutiliza una cuenta PENDIENTE (invitada por el flujo viejo, sin confirmar) o crea una nueva.
     // Así el invitado puede activarse aunque exista un usuario-zombie sin confirmar.
@@ -37,7 +46,7 @@ Deno.serve(async (req: Request) => {
       }
       uid = created.user.id;
     }
-    await admin.auth.admin.updateUserById(uid, { app_metadata: { role } });
+    await admin.auth.admin.updateUserById(uid, { app_metadata: { role: jwtRole, panel: effBase } });
     await admin.from('profiles').upsert({ id: uid, email: inv.email, name: inv.name || inv.email.split('@')[0], role, activated: true });
 
     // Registra el contacto SOLO para clientes (autoritativo, deduplica por email). El staff no va al CRM.

@@ -23,12 +23,16 @@ Deno.serve(async (req: Request) => {
     if (prof.role === 'admin') return json({ error: 'La cuenta de administrador está protegida.' }, 403);
 
     if (action === 'role') {
-      const valid = ['admin', 'sede', 'sales', 'client'];
-      const rr = valid.includes(role) ? role : 'sales';
-      const { error: e1 } = await admin.auth.admin.updateUserById(prof.id, { app_metadata: { role: rr } });
+      // `role` es la KEY del rol; resolvemos su base desde la tabla roles.
+      const { data: roleRow } = await admin.from('roles').select('key, base').eq('key', role).maybeSingle();
+      if (!roleRow) return json({ error: 'Rol no encontrado' }, 400);
+      const base = roleRow.base || 'sales';
+      if (base === 'admin') return json({ error: 'No se puede asignar el rol de administrador total desde aquí.' }, 403);
+      const jwtRole = base === 'sede' ? 'sede' : base === 'client' ? 'client' : 'sales'; // office→sales
+      const { error: e1 } = await admin.auth.admin.updateUserById(prof.id, { app_metadata: { role: jwtRole, panel: base } });
       if (e1) return json({ error: e1.message }, 400);
-      await admin.from('profiles').update({ role: rr }).eq('id', prof.id);
-      return json({ ok: true, role: rr });
+      await admin.from('profiles').update({ role }).eq('id', prof.id);
+      return json({ ok: true, role, base });
     }
     if (action === 'status') {
       const ban = active === false ? '876000h' : 'none';
