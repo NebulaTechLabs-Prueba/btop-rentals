@@ -4259,17 +4259,22 @@ export default function App(){
       const {data,error}=await supabase.functions.invoke("accept-invite",{body:{token,password}});
       if(error||data?.error){t((data&&data.error)||error?.message||"Could not create the account","error");return false}
       /* Cuenta creada y confirmada → iniciar sesión de inmediato (sin depender del correo) */
-      const {error:se}=await supabase.auth.signInWithPassword({email:data.email,password});
-      if(se){t("Account created. Please sign in.","success");setView("login");return false}
+      const {data:sess,error:se}=await supabase.auth.signInWithPassword({email:data.email,password});
+      if(se||!sess?.user){t("Account created. Please sign in.","success");setView("login");return false}
+      /* Enruta según el ROL (staff→su panel, cliente→dashboard). Antes forzaba "client" y dejaba a staff en vacío. */
+      const uobj=userFromSupabase(sess.user);
+      applyLogin(uobj,{welcome:false});
+      if(uobj.role==="client")setView("client");
+      try{window.history.replaceState({},"",location.pathname)}catch(e){}
       t("Account created! You're signed in.","success");
-      return true; /* onAuthStateChange fija el user; el contacto ya quedó registrado server-side */
+      return true;
     }
     /* Fallback dev (sin Supabase): flujo local con localStorage */
     const inv=invites.find(i=>i.token===token&&i.status==="active");
     if(!inv){t("This invite link is invalid or already used. Please request a new one.","error");return false}
     if(users.find(u=>u.email===inv.email)){setInvites(p=>p.map(i=>i.token===token?{...i,status:"used"}:i));t("Account already exists — please sign in.","error");return false}
     const nu={email:inv.email,pw:password,role:"client",name:inv.name,phone:inv.phone};
-    setUsers(p=>[...p,nu]);setUser(nu);
+    setUsers(p=>[...p,nu]);setUser(nu);setView("client");
     setContacts(p=>{const ex=p.find(c=>c.email===inv.email);if(ex)return p.map(c=>c.email===inv.email?{...c,hasAccount:true,phone:c.phone||inv.phone}:c);return[...p,{id:"c"+Date.now(),name:inv.name,email:inv.email,phone:inv.phone,city:"",company:"",idDoc:"",registered:new Date().toISOString().split("T")[0],lastOrder:"",totalSpent:0,orders:0,hasAccount:true}]});
     setInvites(p=>p.map(i=>i.token===token?{...i,status:"used",usedAt:nowISO()}:i));
     t("Account created! You're signed in.","success");
@@ -4556,7 +4561,7 @@ html,body{overflow-x:hidden;max-width:100%}body{font-family:var(--f);background:
         <button onClick={()=>setCartOpen(true)} style={{background:"#fff",color:"#1E3A5F",border:"none",borderRadius:20,padding:"6px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}>Open cart ({cart.length})</button>
         <button onClick={()=>{setOnBehalf(null);setView("sales")}} style={{background:"rgba(255,255,255,.12)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:20,padding:"6px 14px",fontWeight:600,fontSize:12,cursor:"pointer"}}>Cancel</button>
       </div>}
-      {view==="invite"&&<InvitePage token={inviteToken} invite={invites.find(i=>i.token===inviteToken)} onAccept={async(pw)=>{const ok=await acceptInvite(inviteToken,pw);if(ok)setView("client");}} sv={setView} user={user} onSignOutStay={()=>{loggingOutRef.current=true;if(isSupabaseConfigured&&supabase)supabase.auth.signOut();setUser(null);}}/>}
+      {view==="invite"&&<InvitePage token={inviteToken} invite={invites.find(i=>i.token===inviteToken)} onAccept={async(pw)=>{await acceptInvite(inviteToken,pw);}} sv={setView} user={user} onSignOutStay={()=>{loggingOutRef.current=true;if(isSupabaseConfigured&&supabase)supabase.auth.signOut();setUser(null);}}/>}
       {view==="reset"&&<ResetPasswordPage token={resetToken} sv={setView}/>}
       {view==="checkout"&&user&&<CheckoutPage cart={cart} rmCart={rmCart} cTotal={cTotal} user={user} confirm={confirmOrder} cancel={()=>setView("home")} sv={setView} company={company} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} creditUsed={orders.filter(o=>(o.payMethod==="credit"||o.payMethod==="invoice")&&o.ue===user.email&&o.status!=="Cancelled"&&!o.settlementPaid).reduce((s,o)=>s+(o.tp||0),0)} savedPays={savedPays} mySignature={mySignature} saveMySignature={saveMySignature}/>}
       {view==="client"&&user?.role==="client"&&<Cl orders={orders.filter(o=>o.ue===user.email)} sv={setView} user={user} contacts={contacts} setContacts={setContacts} logout={logout} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} orders_all={orders} savedPays={savedPays} setSavedPays={setSavedPays} t={t} clientDocs={clientDocs} addClientDoc={addClientDoc} removeClientDoc={removeClientDoc} depositReturnPref={depositReturnPref} setDepositReturnPref={setDepositReturnPref} mySignature={mySignature} saveMySignature={saveMySignature} clientProfile={clientProfile} saveClientProfile={saveClientProfile}/>}
