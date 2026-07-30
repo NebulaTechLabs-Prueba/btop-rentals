@@ -5740,7 +5740,10 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
   const [myRoleName,setMyRoleName]=useState("");
   useEffect(()=>{if(!supabase)return;let off=false;(async()=>{try{const {data:au}=await supabase.auth.getUser();const su=au?.user;if(!su)return;if((su.app_metadata?.panel||su.app_metadata?.role)==="admin"){if(!off){setMyCaps(null);setMyRoleName("Super Admin")}return}const {data:prof}=await supabase.from("profiles").select("role").eq("id",su.id).maybeSingle();const {data:roleRow}=prof?await supabase.from("roles").select("capabilities,name").eq("key",prof.role).maybeSingle():{data:null};if(!off){setMyCaps(roleRow?.capabilities||{});setMyRoleName(roleRow?.name||"")}}catch(e){if(!off)setMyCaps({});}})();return()=>{off=true}},[]);
   const NAV_CAP={fleet:"fleet",detfleet:"fleet",maintenance:"fleet",spaces:"spaces",bookings:"bookings",reservations:"bookings",contacts:"contacts",carts:"carts",messages:"messages",posts:"posts",orderspay:"payments",settlement:"payments",pay:"payments",analytics:"payments",credit:"credit",contracts:"contracts",commissions:"commissions",invoices:"invoices",users:"users",hq:"deliveries",config:"settings"};
-  const canSee=(id)=>{if(myCaps===null)return true;if(id==="dash")return true;const c=NAV_CAP[id];if(!c)return true;const l=myCaps[c];return l==="view"||l==="manage";};
+  /* Admin (panel admin) = todo, inmediato. Office = solo Dashboard mientras cargan las capacidades
+     (evita el "flash" de super admin), y luego solo sus secciones permitidas. */
+  const isFullAdmin=user?.panel==="admin"||user?.role==="admin";
+  const canSee=(id)=>{if(isFullAdmin)return true;if(id==="dash")return true;if(myCaps==null)return false;const c=NAV_CAP[id];if(!c)return true;const l=myCaps[c];return l==="view"||l==="manage";};
   const meta=ADM_NAV.find(n=>n.id===section);
   const grouped=(()=>{const g={};ADM_NAV.filter(i=>canSee(i.id)).forEach(i=>{if(!g[i.group])g[i.group]=[];g[i.group].push(i)});return g})();
 
