@@ -3887,7 +3887,7 @@ function CommissionsMod({orders=[],users=[],commissionPolicy,setCommissionPolicy
 }
 
 /* ═══ MAGIC-LINK INVITE — client activates their own account by setting a password (one-time) ═══ */
-function InvitePage({token,invite,onAccept,sv}){
+function InvitePage({token,invite,onAccept,sv,user,onSignOutStay}){
   const [pw,setPw]=useState("");const [pw2,setPw2]=useState("");const [err,setErr]=useState("");
   const [inv,setInv]=useState(invite||null);
   const [loading,setLoading]=useState(!!(isSupabaseConfigured&&supabase&&token));
@@ -3900,6 +3900,21 @@ function InvitePage({token,invite,onAccept,sv}){
   },[token]);
   const valid=!!(inv&&inv.email);
   const go=async()=>{if(pw.length<8){setErr("Password must be at least 8 characters");return}if(pw!==pw2){setErr("Passwords do not match");return}setErr("");setBusy(true);try{await onAccept(pw);}finally{setBusy(false);}};
+  /* Guard: aceptar una invitación inicia sesión como la cuenta nueva. Si ya hay una sesión activa,
+     exigir cerrar sesión primero (evita reemplazar silenciosamente la sesión de otro usuario, p.ej. admin). */
+  if(user&&user.email){
+    return <div className="fi" style={{minHeight:"80vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"linear-gradient(135deg,var(--b0),var(--g0))"}}>
+      <div className="cd" style={{maxWidth:440,width:"100%",padding:40,textAlign:"center"}}>
+        <div style={{width:60,height:60,borderRadius:16,background:"linear-gradient(135deg,var(--orange),#F97316)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><X n="lock" s={28} c="#fff"/></div>
+        <h2 style={{fontSize:22,fontWeight:800,color:"var(--navy)",marginBottom:8}}>Ya tienes una sesión activa</h2>
+        <p style={{color:"var(--g5)",fontSize:14,marginBottom:20}}>Estás conectado como <strong>{user.email}</strong>. Para aceptar esta invitación y crear la cuenta nueva, primero cierra la sesión actual.</p>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <button onClick={()=>onSignOutStay&&onSignOutStay()} className="btn bp blg" style={{width:"100%",justifyContent:"center"}}>Cerrar sesión y continuar</button>
+          <button onClick={()=>sv("home")} className="btn bs" style={{width:"100%",justifyContent:"center"}}>Cancelar</button>
+        </div>
+      </div>
+    </div>;
+  }
   if(loading)return <div className="fi" style={{minHeight:"80vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}><div style={{color:"var(--g5)"}}>Loading invite…</div></div>;
   return <div className="fi" style={{minHeight:"80vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"linear-gradient(135deg,var(--b0),var(--g0))"}}>
     <div className="cd" style={{maxWidth:440,width:"100%",padding:40}}>
@@ -4541,7 +4556,7 @@ html,body{overflow-x:hidden;max-width:100%}body{font-family:var(--f);background:
         <button onClick={()=>setCartOpen(true)} style={{background:"#fff",color:"#1E3A5F",border:"none",borderRadius:20,padding:"6px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}>Open cart ({cart.length})</button>
         <button onClick={()=>{setOnBehalf(null);setView("sales")}} style={{background:"rgba(255,255,255,.12)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:20,padding:"6px 14px",fontWeight:600,fontSize:12,cursor:"pointer"}}>Cancel</button>
       </div>}
-      {view==="invite"&&<InvitePage token={inviteToken} invite={invites.find(i=>i.token===inviteToken)} onAccept={async(pw)=>{const ok=await acceptInvite(inviteToken,pw);if(ok)setView("client");}} sv={setView}/>}
+      {view==="invite"&&<InvitePage token={inviteToken} invite={invites.find(i=>i.token===inviteToken)} onAccept={async(pw)=>{const ok=await acceptInvite(inviteToken,pw);if(ok)setView("client");}} sv={setView} user={user} onSignOutStay={()=>{loggingOutRef.current=true;if(isSupabaseConfigured&&supabase)supabase.auth.signOut();setUser(null);}}/>}
       {view==="reset"&&<ResetPasswordPage token={resetToken} sv={setView}/>}
       {view==="checkout"&&user&&<CheckoutPage cart={cart} rmCart={rmCart} cTotal={cTotal} user={user} confirm={confirmOrder} cancel={()=>setView("home")} sv={setView} company={company} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} creditUsed={orders.filter(o=>(o.payMethod==="credit"||o.payMethod==="invoice")&&o.ue===user.email&&o.status!=="Cancelled"&&!o.settlementPaid).reduce((s,o)=>s+(o.tp||0),0)} savedPays={savedPays} mySignature={mySignature} saveMySignature={saveMySignature}/>}
       {view==="client"&&user?.role==="client"&&<Cl orders={orders.filter(o=>o.ue===user.email)} sv={setView} user={user} contacts={contacts} setContacts={setContacts} logout={logout} creditLine={creditLines.find(c=>c.active&&c.email===user.email)} orders_all={orders} savedPays={savedPays} setSavedPays={setSavedPays} t={t} clientDocs={clientDocs} addClientDoc={addClientDoc} removeClientDoc={removeClientDoc} depositReturnPref={depositReturnPref} setDepositReturnPref={setDepositReturnPref} mySignature={mySignature} saveMySignature={saveMySignature} clientProfile={clientProfile} saveClientProfile={saveClientProfile}/>}
