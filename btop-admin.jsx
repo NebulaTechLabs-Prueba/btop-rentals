@@ -1656,11 +1656,19 @@ function ContactsMod({contacts:propContacts,setContacts:propSetContacts,orders=[
   const [pwSent,setPwSent]=useState(false);
   const [pwErr,setPwErr]=useState("");
   const [pwBusy,setPwBusy]=useState(false);
+  const [addErr,setAddErr]=useState("");
   /* Disable / Delete confirmation flows */
   const [confirmAction,setConfirmAction]=useState(null); /* {kind:"disable"|"enable"|"delete", contact} */
   const filtered=contacts.filter(c=>!q||(c.name||"").toLowerCase().includes(q.toLowerCase())||(c.email||"").toLowerCase().includes(q.toLowerCase()));
   const {slice,Pager}=usePagination(filtered,5);
-  const addContact=()=>{if(!nc.name||!nc.email)return;setContacts(p=>[{...nc,id:nid(),registered:new Date().toISOString().split("T")[0],lastOrder:"",totalSpent:0,orders:0,hasAccount:false},...p]);setNc({name:"",email:"",phone:"",city:"Laredo",company:"",idDoc:""});setAdding(false)};
+  const addContact=()=>{
+    if(!nc.name||!nc.email)return;
+    const email=nc.email.trim().toLowerCase();
+    if(contacts.some(c=>(c.email||"").trim().toLowerCase()===email)){setAddErr("Ya existe un contacto con ese correo.");return;}
+    setAddErr("");
+    setContacts(p=>[{...nc,email:nc.email.trim(),id:nid(),registered:new Date().toISOString().split("T")[0],lastOrder:"",totalSpent:0,orders:0,hasAccount:false},...p]);
+    setNc({name:"",email:"",phone:"",city:"Laredo",company:"",idDoc:""});setAdding(false);
+  };
   const openContact=(c)=>{setViewing(c);setEditing(false);setEditForm({...c});setPwOpen(false);setPwForm({newPw:"",confirmPw:""});setPwSent(false)};
   const saveEdit=()=>{
     setContacts(p=>p.map(c=>c.id===viewing.id?{...c,...editForm}:c));
@@ -1732,7 +1740,7 @@ function ContactsMod({contacts:propContacts,setContacts:propSetContacts,orders=[
       }}/></div>
       <div className="flex items-center gap-3 mb-5">
         <div className="relative flex-1 max-w-md"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search contacts..." className="w-full pl-9 pr-4 py-2.5 bg-white border border-stone-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/></div>
-        <button onClick={()=>setAdding(true)} className="inline-flex items-center gap-2 bg-blue-900 text-white px-4 py-2.5 rounded-full text-sm hover:bg-blue-700 shrink-0"><Plus className="w-4 h-4"/>Add Contact</button>
+        <button onClick={()=>{setAddErr("");setAdding(true)}} className="inline-flex items-center gap-2 bg-blue-900 text-white px-4 py-2.5 rounded-full text-sm hover:bg-blue-700 shrink-0"><Plus className="w-4 h-4"/>Add Contact</button>
       </div>
       {adding&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="bg-white w-full max-w-lg rounded-2xl p-6">
         <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-semibold">Add New Contact</h3><button onClick={()=>setAdding(false)} className="p-2 hover:bg-stone-100 rounded-full"><Xx className="w-5 h-5"/></button></div>
@@ -1740,6 +1748,7 @@ function ContactsMod({contacts:propContacts,setContacts:propSetContacts,orders=[
           <div className="grid grid-cols-2 gap-4"><F label="Full Name *"><Inp value={nc.name} onChange={v=>setNc(p=>({...p,name:v}))} placeholder="John Doe"/></F><F label="Email *"><Inp value={nc.email} onChange={v=>setNc(p=>({...p,email:v}))} type="email" placeholder="john@email.com"/></F></div>
           <div className="grid grid-cols-2 gap-4"><F label="Phone"><Inp value={nc.phone} onChange={v=>setNc(p=>({...p,phone:v}))} placeholder="(469) 555-0000"/></F><F label="City"><Inp value={nc.city} onChange={v=>setNc(p=>({...p,city:v}))} placeholder="Laredo"/></F></div>
           <div className="grid grid-cols-2 gap-4"><F label="Company"><Inp value={nc.company} onChange={v=>setNc(p=>({...p,company:v}))} placeholder="Optional"/></F><F label="ID / License"><Inp value={nc.idDoc} onChange={v=>setNc(p=>({...p,idDoc:v}))} placeholder="TX DL 12345678"/></F></div>
+          {addErr&&<div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2.5">{addErr}</div>}
           <button onClick={addContact} disabled={!nc.name||!nc.email} className="w-full px-5 py-2.5 bg-blue-900 text-white rounded-full text-sm hover:bg-blue-700 disabled:opacity-40 inline-flex items-center justify-center gap-2"><Save className="w-4 h-4"/>Create Contact</button>
         </div>
       </div></div>}
@@ -5629,7 +5638,14 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
   const [users,setUsers]=useState([]);
   const [roles,setRoles]=useSetting("admin_roles",admSeedRoles);
   /* Lista de STAFF desde Supabase (profiles). Los clientes se gestionan en Contacts, no aquí. */
-  useEffect(()=>{if(!supabase)return;loadProfiles().then(ps=>{if(ps)setUsers(ps.filter(p=>p.role!=="client").map(p=>({id:p.email,name:p.name,email:p.email,role:p.role==="admin"?"Super Admin":p.role==="sede"?"Fleet Manager":p.role==="sales"?"Sales Rep":p.role,status:p.disabled?"inactive":"active",last:"—",initials:(p.name||p.email).slice(0,2).toUpperCase()})))}).catch(()=>{})},[]);
+  useEffect(()=>{if(!supabase)return;const keyToLabel=k=>k==="admin"?"Super Admin":k==="sede"?"Fleet Manager":k==="sales"?"Sales Rep":k;(async()=>{
+    /* Staff activado/desactivado desde profiles + invitaciones pendientes (aún sin activar) desde invites */
+    let ps=null;try{ps=await loadProfiles()}catch(e){}
+    const staff=(ps||[]).filter(p=>p.role!=="client").map(p=>({id:p.email,name:p.name,email:p.email,role:keyToLabel(p.role),status:p.disabled?"inactive":(p.activated?"active":"invited"),last:"—",initials:(p.name||p.email).slice(0,2).toUpperCase()}));
+    const seen=new Set(staff.map(u=>(u.email||"").toLowerCase()));
+    let pend=[];try{const {data}=await supabase.from("invites").select("email,name,role,status").eq("status","active");pend=(data||[]).filter(i=>i.role&&i.role!=="client"&&!seen.has((i.email||"").toLowerCase())).map(i=>({id:i.email,name:i.name||i.email,email:i.email,role:keyToLabel(i.role),status:"invited",last:"—",initials:(i.name||i.email).slice(0,2).toUpperCase()}))}catch(e){}
+    setUsers([...staff,...pend]);
+  })()},[]);
   const [gateways,setGateways]=useSetting("payment_gateways",{
     stripe:{connected:false,pubKey:"",secretKey:"",webhookSecret:"",mode:"test"},
     zelle:{enabled:true,email:"btoprentals@gmail.com",instructions:"Send your Zelle transfer and upload the receipt for verification."},

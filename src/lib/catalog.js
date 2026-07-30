@@ -4,7 +4,7 @@ import { supabase } from './supabase.js';
 export async function loadProfiles() {
   if (!supabase) return null;
   try {
-    const { data, error } = await supabase.from('profiles').select('email,name,role,disabled');
+    const { data, error } = await supabase.from('profiles').select('email,name,role,disabled,activated');
     if (error || !Array.isArray(data) || data.length === 0) return null;
     return data;
   } catch {

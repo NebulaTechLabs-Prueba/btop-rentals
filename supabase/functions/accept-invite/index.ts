@@ -17,16 +17,28 @@ Deno.serve(async (req: Request) => {
     if (!inv || !inv.email) return json({ error: 'Esta invitación es inválida o ya fue usada. Solicita una nueva.' }, 400);
     const role = inv.role || 'client';
 
-    // Crea la cuenta YA CONFIRMADA (no depende de la confirmación por email).
-    const { data: created, error: ce } = await admin.auth.admin.createUser({ email: inv.email, password: String(password), email_confirm: true, user_metadata: { name: inv.name || '' } });
-    if (ce || !created?.user) {
-      const msg = (ce?.message || '').toLowerCase();
-      if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) return json({ error: 'Ya existe una cuenta con este correo. Por favor inicia sesión.' }, 409);
-      return json({ error: ce?.message || 'No se pudo crear la cuenta.' }, 400);
+    // Reutiliza una cuenta PENDIENTE (invitada por el flujo viejo, sin confirmar) o crea una nueva.
+    // Así el invitado puede activarse aunque exista un usuario-zombie sin confirmar.
+    const { data: existingProfile } = await admin.from('profiles').select('id').ilike('email', inv.email).maybeSingle();
+    let uid: string;
+    if (existingProfile) {
+      const { data: u } = await admin.auth.admin.getUserById(existingProfile.id);
+      const activeAccount = !!(u?.user?.email_confirmed_at) || !!(u?.user?.last_sign_in_at);
+      if (activeAccount) return json({ error: 'Ya existe una cuenta con este correo. Por favor inicia sesión.' }, 409);
+      uid = existingProfile.id;
+      const { error: ue } = await admin.auth.admin.updateUserById(uid, { password: String(password), email_confirm: true, user_metadata: { name: inv.name || '' } });
+      if (ue) return json({ error: ue.message }, 400);
+    } else {
+      const { data: created, error: ce } = await admin.auth.admin.createUser({ email: inv.email, password: String(password), email_confirm: true, user_metadata: { name: inv.name || '' } });
+      if (ce || !created?.user) {
+        const msg = (ce?.message || '').toLowerCase();
+        if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) return json({ error: 'Ya existe una cuenta con este correo. Por favor inicia sesión.' }, 409);
+        return json({ error: ce?.message || 'No se pudo crear la cuenta.' }, 400);
+      }
+      uid = created.user.id;
     }
-    const uid = created.user.id;
     await admin.auth.admin.updateUserById(uid, { app_metadata: { role } });
-    await admin.from('profiles').upsert({ id: uid, email: inv.email, name: inv.name || inv.email.split('@')[0], role });
+    await admin.from('profiles').upsert({ id: uid, email: inv.email, name: inv.name || inv.email.split('@')[0], role, activated: true });
 
     // Registra el contacto SOLO para clientes (autoritativo, deduplica por email). El staff no va al CRM.
     if (role === 'client') {
