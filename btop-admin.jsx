@@ -2622,7 +2622,7 @@ function AnalyticsMod({orders=[],fleet=[],spaces=[],contacts=[],creditLines=[],b
 }
 
 /* ═══ DASHBOARD ═══ */
-function DashMod({nav,fleet,spaces,orders=[],bookings=[],creditLines=[],contacts=[]}){
+function DashMod({nav,fleet,spaces,orders=[],bookings=[],creditLines=[],contacts=[],userName=""}){
   /* Real numbers */
   const today=new Date().toISOString().split("T")[0];
   const liveStatuses=["Reserved","Confirmed","Active","Delivered","Pending"];
@@ -2647,7 +2647,7 @@ function DashMod({nav,fleet,spaces,orders=[],bookings=[],creditLines=[],contacts
 
   return (
     <div>
-      <div className="mb-6"><h2 className="text-2xl font-semibold">Welcome back, Admin 👋</h2><p className="text-stone-600 text-sm mt-1">BTOP Rentals operations overview.</p></div>
+      <div className="mb-6"><h2 className="text-2xl font-semibold">Welcome back, {(userName||"there").split(" ")[0]} 👋</h2><p className="text-stone-600 text-sm mt-1">BTOP Rentals operations overview.</p></div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <St label="Active Rentals" value={activeFleetOrders.length} delta={`${availFleet.length} available`} trend="up" icon={Truck} breakdown={{
           formula:"orders where item is a vehicle, status is live (Reserved/Confirmed/Active/Delivered/Active/Pending), and today is between start and end dates",
@@ -4136,7 +4136,7 @@ export default function App(){
   const [inviteToken,setInviteToken]=useState(null);
   const [resetToken,setResetToken]=useState(null);
   /* On load, honor a ?invite=TOKEN magic link */
-  useEffect(()=>{try{const q=new URLSearchParams(window.location.search);const tk=q.get("invite");if(tk){setInviteToken(tk);setView("invite")}const rk=q.get("reset");if(rk){setResetToken(rk);setView("reset")}}catch(e){}},[]);
+  useEffect(()=>{try{const q=new URLSearchParams(window.location.search);const tk=q.get("invite");if(tk){setInviteToken(tk);setView("invite")}const rk=q.get("reset");if(rk){setResetToken(rk);setView("reset")}if(tk||rk)window.history.replaceState({},"",location.pathname);}catch(e){}},[]);
   /* Company profile — single source of truth for contact details (editable in Settings) */
   const [company,setCompany]=useSetting("company",{name:"BTOP Rentals",address:"9807 Mines Rd #9, Laredo TX 78045",phone:"+1 469 690 712",email:"btoprentals@gmail.com",hours:"Mon–Fri 7AM–6PM · Sat 8AM–2PM"});
   /* Saved payment methods per client email (shared so checkout can prefill from the client's dashboard) */
@@ -4593,7 +4593,7 @@ html,body{overflow-x:hidden;max-width:100%}body{font-family:var(--f);background:
       {view==="register"&&<Re dr={doReg} sv={setView}/>}
       {view==="forgot"&&<Fo t={t} sv={setView}/>}
       {view==="book"&&<Bk fleet={fleet} ac={addCart} sv={setView} t={t} bookings={fleetBookings}/>}
-      {view==="admin"&&(user?.panel==="admin"||user?.panel==="office"||user?.role==="admin")&&<Ad fleet={fleet} sf={setFleet} spaces={spaces} setSpaces={setSpaces} contacts={contacts} setContacts={setContacts} orders={orders} setOrders={setOrders} t={t} sv={setView} messages={messages} setMessages={setMessages} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} logout={logout} alarmEnabled={alarmEnabled} setAlarmEnabled={setAlarmEnabled} alarmActive={alarmActive} setAlarmActive={setAlarmActive} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars} carts={carts} setCarts={setCarts} contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl} creditLines={creditLines} setCreditLines={setCreditLines} approveOrder={approveOrder} rejectOrder={rejectOrder} company={company} setCompany={setCompany} clientDocsAll={clientDocsAll} depositReturnAll={depositReturnAll} signaturesAll={signaturesAll} saveMySignature={saveMySignature} mySignature={mySignature} contractPolicy={contractPolicy} setContractPolicy={setContractPolicy} signContractAsBtop={signContractAsBtop} sendAgreementNow={sendAgreementNow} commissionPolicy={commissionPolicy} setCommissionPolicy={setCommissionPolicy} authUsers={users} sendMagicLink={sendMagicLink}/>}
+      {view==="admin"&&(user?.panel==="admin"||user?.panel==="office"||user?.role==="admin")&&<Ad user={user} fleet={fleet} sf={setFleet} spaces={spaces} setSpaces={setSpaces} contacts={contacts} setContacts={setContacts} orders={orders} setOrders={setOrders} t={t} sv={setView} messages={messages} setMessages={setMessages} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} logout={logout} alarmEnabled={alarmEnabled} setAlarmEnabled={setAlarmEnabled} alarmActive={alarmActive} setAlarmActive={setAlarmActive} emailTemplate={emailTemplate} setEmailTemplate={setEmailTemplate} emailLog={emailLog} sendConfirmationEmail={sendConfirmationEmail} renderEmailVars={renderEmailVars} carts={carts} setCarts={setCarts} contracts={contracts} setContracts={setContracts} contractTpl={contractTpl} setContractTpl={setContractTpl} creditLines={creditLines} setCreditLines={setCreditLines} approveOrder={approveOrder} rejectOrder={rejectOrder} company={company} setCompany={setCompany} clientDocsAll={clientDocsAll} depositReturnAll={depositReturnAll} signaturesAll={signaturesAll} saveMySignature={saveMySignature} mySignature={mySignature} contractPolicy={contractPolicy} setContractPolicy={setContractPolicy} signContractAsBtop={signContractAsBtop} sendAgreementNow={sendAgreementNow} commissionPolicy={commissionPolicy} setCommissionPolicy={setCommissionPolicy} authUsers={users} sendMagicLink={sendMagicLink}/>}
       {view==="hqfield"&&(user?.role==="sede"||user?.role==="admin")&&<FieldHQ fleet={fleet} spaces={spaces} deliveries={deliveries} setDeliveries={setDeliveries} bookings={fleetBookings} setBookings={setFleetBookings} user={user} sv={setView} logout={logout}/>}
       {view==="sales"&&(user?.role==="sales"||user?.role==="admin")&&<SalesPanel user={user} sv={setView} logout={logout} t={t} contacts={contacts} setContacts={setContacts} fleet={fleet} orders={orders} fleetBookings={fleetBookings} scheduleSale={scheduleSale} commissionPolicy={commissionPolicy} sendMagicLink={sendMagicLink} startBooking={(c)=>{setOnBehalf(c);setView("fleet")}} updateMyAccount={updateMyAccount}/>}
       {/* On-behalf booking banner — shows while a salesperson builds a cart for a contact on the public catalog */}
@@ -5677,7 +5677,7 @@ function Fo({t,sv}){const [em,sem]=useState("");const [sent,ss]=useState(false);
 }
 
 /* ═══════ ADMIN ═══════ */
-function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,setMessages,deliveries,setDeliveries,bookings,setBookings,orders,setOrders,logout,alarmEnabled,setAlarmEnabled,alarmActive,setAlarmActive,emailTemplate,setEmailTemplate,emailLog,sendConfirmationEmail,renderEmailVars,carts,setCarts,contracts,setContracts,contractTpl,setContractTpl,creditLines,setCreditLines,approveOrder,rejectOrder,company,setCompany,clientDocsAll,depositReturnAll,signaturesAll,saveMySignature,mySignature,contractPolicy,setContractPolicy,signContractAsBtop,sendAgreementNow,commissionPolicy,setCommissionPolicy,authUsers,sendMagicLink}){
+function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,setMessages,deliveries,setDeliveries,bookings,setBookings,orders,setOrders,logout,alarmEnabled,setAlarmEnabled,alarmActive,setAlarmActive,emailTemplate,setEmailTemplate,emailLog,sendConfirmationEmail,renderEmailVars,carts,setCarts,contracts,setContracts,contractTpl,setContractTpl,creditLines,setCreditLines,approveOrder,rejectOrder,company,setCompany,clientDocsAll,depositReturnAll,signaturesAll,saveMySignature,mySignature,contractPolicy,setContractPolicy,signContractAsBtop,sendAgreementNow,commissionPolicy,setCommissionPolicy,authUsers,sendMagicLink,user}){
   const [section,setSection]=useState("dash");
   /* Clear alarm when admin opens a section where the new order is visible */
   useEffect(()=>{
@@ -5737,7 +5737,8 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
 
   /* Capacidades del usuario actual: null = acceso total (admin); un mapa = panel recortado (office). */
   const [myCaps,setMyCaps]=useState(null);
-  useEffect(()=>{if(!supabase)return;let off=false;(async()=>{try{const {data:au}=await supabase.auth.getUser();const su=au?.user;if(!su)return;if((su.app_metadata?.panel||su.app_metadata?.role)==="admin"){if(!off)setMyCaps(null);return}const {data:prof}=await supabase.from("profiles").select("role").eq("id",su.id).maybeSingle();const {data:roleRow}=prof?await supabase.from("roles").select("capabilities").eq("key",prof.role).maybeSingle():{data:null};if(!off)setMyCaps(roleRow?.capabilities||{});}catch(e){if(!off)setMyCaps({});}})();return()=>{off=true}},[]);
+  const [myRoleName,setMyRoleName]=useState("");
+  useEffect(()=>{if(!supabase)return;let off=false;(async()=>{try{const {data:au}=await supabase.auth.getUser();const su=au?.user;if(!su)return;if((su.app_metadata?.panel||su.app_metadata?.role)==="admin"){if(!off){setMyCaps(null);setMyRoleName("Super Admin")}return}const {data:prof}=await supabase.from("profiles").select("role").eq("id",su.id).maybeSingle();const {data:roleRow}=prof?await supabase.from("roles").select("capabilities,name").eq("key",prof.role).maybeSingle():{data:null};if(!off){setMyCaps(roleRow?.capabilities||{});setMyRoleName(roleRow?.name||"")}}catch(e){if(!off)setMyCaps({});}})();return()=>{off=true}},[]);
   const NAV_CAP={fleet:"fleet",detfleet:"fleet",maintenance:"fleet",spaces:"spaces",bookings:"bookings",reservations:"bookings",contacts:"contacts",carts:"carts",messages:"messages",posts:"posts",orderspay:"payments",settlement:"payments",pay:"payments",analytics:"payments",credit:"credit",contracts:"contracts",commissions:"commissions",invoices:"invoices",users:"users",hq:"deliveries",config:"settings"};
   const canSee=(id)=>{if(myCaps===null)return true;if(id==="dash")return true;const c=NAV_CAP[id];if(!c)return true;const l=myCaps[c];return l==="view"||l==="manage";};
   const meta=ADM_NAV.find(n=>n.id===section);
@@ -5767,8 +5768,8 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
         </nav>
         <div style={{padding:"12px 16px",borderTop:"1px solid #e7e5e4"}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
-            <div style={{width:36,height:36,borderRadius:"50%",background:"#dbeafe",color:"#1e40af",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600}}>AB</div>
-            <div><div style={{fontSize:14,fontWeight:500}}>Admin BTOP</div><div style={{fontSize:12,color:"#78716c"}}>Super Admin</div></div>
+            <div style={{width:36,height:36,borderRadius:"50%",background:"#dbeafe",color:"#1e40af",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600}}>{((user?.name||user?.email||"S").trim().slice(0,2)).toUpperCase()}</div>
+            <div><div style={{fontSize:14,fontWeight:500}}>{user?.name||user?.email||"Staff"}</div><div style={{fontSize:12,color:"#78716c"}}>{myRoleName||(user?.panel==="admin"||user?.role==="admin"?"Super Admin":"Staff")}</div></div>
           </div>
           <button onClick={()=>sv("home")} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",fontSize:14,color:"#1e40af",border:"none",background:"transparent",borderRadius:8,cursor:"pointer",marginBottom:4}} onMouseEnter={e=>e.currentTarget.style.background="#eff6ff"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><Globe style={{width:16,height:16}}/>Back to Website</button>
           <button onClick={()=>setShowLogout(true)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",fontSize:14,color:"#dc2626",border:"none",background:"transparent",borderRadius:8,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background="#fef2f2"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><LogOut style={{width:16,height:16}}/>Sign Out</button>
@@ -5801,7 +5802,7 @@ function Ad({sv,sf:appSetFleet,spaces,setSpaces,contacts,setContacts,messages,se
           </div>
         </div>
         <div className="admin-main-body text-stone-900" style={{padding:32}}>
-          {section==="dash"&&<DashMod nav={setSection} fleet={fleet} spaces={spaces} orders={orders} bookings={bookings} creditLines={creditLines} contacts={contacts}/>}
+          {section==="dash"&&<DashMod nav={setSection} fleet={fleet} spaces={spaces} orders={orders} bookings={bookings} creditLines={creditLines} contacts={contacts} userName={user?.name||user?.email}/>}
           {section==="analytics"&&<AnalyticsMod orders={orders} fleet={fleet} spaces={spaces} contacts={contacts} creditLines={creditLines} bookings={bookings}/>}
           {section==="fleet"&&<FleetMod fleet={fleet} setFleet={setFleet} bookings={bookings} orders={orders}/>}
           {section==="detfleet"&&<DetailedFleetMod fleet={fleet} bookings={bookings} setFleet={setFleet}/>}
