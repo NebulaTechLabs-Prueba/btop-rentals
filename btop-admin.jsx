@@ -95,6 +95,40 @@ const ROLE_BASES=[["office","Panel admin (permisos a medida)"],["sede","Fleet / 
 const SECTIONS=[["fleet","Fleet"],["spaces","Spaces"],["contacts","Contacts"],["bookings","Bookings"],["payments","Payments"],["credit","Credit"],["invoices","Invoices"],["contracts","Contracts"],["commissions","Commissions"],["posts","Posts"],["messages","Messages"],["carts","Carts"],["deliveries","Deliveries"],["users","Users"],["settings","Settings"]];
 const CAP_LEVELS=[["none","None"],["view","View"],["manage","Manage"]];
 const capLevel=(caps,sec)=>(caps&&caps[sec])||"none";
+/* Hermeticidad por dominio: cada base solo puede recibir capacidades de SU dominio.
+   office/admin = todas (gestion transversal); sales = ventas; sede = mantenimiento/flota. */
+const ALL_SECTION_KEYS=SECTIONS.map(s=>s[0]);
+const DOMAIN_SECTIONS={
+  admin:ALL_SECTION_KEYS, office:ALL_SECTION_KEYS,
+  sales:["contacts","bookings","carts","commissions","invoices"],
+  sede:["fleet","spaces","bookings","deliveries","contracts"],
+  client:[],
+};
+const inDomain=(base,sec)=>(DOMAIN_SECTIONS[base]||[]).includes(sec);
+/* Capabilities of the currently signed-in user, read once from profiles→roles.
+   Returns: null while loading · "ALL" for full admin · {} none · {section:level} otherwise. */
+function useMyCaps(){
+  const [caps,setCaps]=useState(null);
+  useEffect(()=>{
+    if(!supabase){setCaps("ALL");return;}
+    let off=false;
+    (async()=>{
+      try{
+        const {data:au}=await supabase.auth.getUser();const su=au&&au.user;
+        if(!su){if(!off)setCaps({});return;}
+        if((su.app_metadata?.panel||su.app_metadata?.role)==="admin"){if(!off)setCaps("ALL");return;}
+        const {data:prof}=await supabase.from("profiles").select("role").eq("id",su.id).maybeSingle();
+        const {data:r}=prof?.role?await supabase.from("roles").select("base,capabilities").eq("key",prof.role).maybeSingle():{data:null};
+        if(!off)setCaps(r?.base==="admin"?"ALL":(r?.capabilities||{}));
+      }catch(e){if(!off)setCaps({});}
+    })();
+    return()=>{off=true;};
+  },[]);
+  return caps;
+}
+const capOf=(caps,sec)=>caps==="ALL"?"manage":((caps&&caps[sec])||"none");
+const canView=(caps,sec)=>caps==="ALL"||capOf(caps,sec)==="view"||capOf(caps,sec)==="manage";
+const canManage=(caps,sec)=>caps==="ALL"||capOf(caps,sec)==="manage";
 const PERMS=["Fleet","Spaces","Bookings","Payments","Users","Settings"];
 
 
@@ -188,7 +222,7 @@ function TArea({value,onChange,placeholder="",rows=3}){return (<textarea value={
 function Uploader({prefix="misc",accept="image/*",label="Upload",onUploaded,className}){
   const [busy,setBusy]=useState(false);const [err,setErr]=useState("");
   const pick=async(file)=>{if(!file)return;setBusy(true);setErr("");try{const m=await uploadMedia(file,prefix);onUploaded&&onUploaded(m);}catch(e){setErr("Error");console.warn("[upload]",e?.message);setTimeout(()=>setErr(""),2500);}setBusy(false);};
-  return (<label className={className||"inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-stone-200 rounded-lg text-xs cursor-pointer hover:bg-stone-100"}><Upload className="w-3 h-3"/>{busy?"Subiendo…":(err||label)}<input type="file" accept={accept} className="hidden" onChange={e=>{pick(e.target.files&&e.target.files[0]);e.target.value="";}}/></label>);
+  return (<label className={className||"inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-stone-200 rounded-lg text-xs cursor-pointer hover:bg-stone-100"}><Upload className="w-3 h-3"/>{busy?"Uploading…":(err||label)}<input type="file" accept={accept} className="hidden" onChange={e=>{pick(e.target.files&&e.target.files[0]);e.target.value="";}}/></label>);
 }
 /* Galería de fotos: miniaturas + slot para subir (máx `max`). photos = [{url,path,name}]. */
 function PhotoSlots({photos=[],prefix="misc",max=8,onChange}){
@@ -232,7 +266,7 @@ function ProductEditor({item,onClose,onSave,categories=ALL_CATS,vehicleCats=VEHI
             <div className="grid grid-cols-2 gap-4"><F label="Name *"><Inp value={p.name} onChange={v=>u("name",v)} placeholder="Freightliner Cascadia 2016"/></F><F label="Category *"><Sel value={p.category} onChange={v=>u("category",v)} options={categories}/></F></div>
             <div className="grid grid-cols-3 gap-4"><F label="Plate"><Inp value={p.plate} onChange={v=>u("plate",v)}/></F><F label="VIN"><Inp value={p.vin} onChange={v=>u("vin",v)}/></F><F label="Year"><Inp value={p.year} onChange={v=>u("year",v)} type="number"/></F></div>
             <div className="grid grid-cols-2 gap-4"><F label="Make"><Inp value={p.make} onChange={v=>u("make",v)}/></F><F label="Model"><Inp value={p.model} onChange={v=>u("model",v)}/></F></div>
-            <F label="Photos" hint="Se muestran en el catálogo público"><PhotoSlots photos={p.photos} prefix={`fleet/${p.id||"new"}/photos`} onChange={v=>u("photos",v)}/></F>
+            <F label="Photos" hint="Shown in the public catalog"><PhotoSlots photos={p.photos} prefix={`fleet/${p.id||"new"}/photos`} onChange={v=>u("photos",v)}/></F>
           </div>}
           {tab==="pricing"&&<div className="space-y-6">
             {/* RATE TABLE */}
@@ -365,7 +399,7 @@ function SpaceEditor({item,onClose,onSave}){
           <div className="grid grid-cols-2 gap-4"><F label="Max Weight"><Inp value={s.maxWeight||""} onChange={v=>u("maxWeight",v)} placeholder="45,000 lbs"/></F><F label="Surface"><Sel value={s.surface||"Concrete"} onChange={v=>u("surface",v)} options={["Concrete","Gravel","Asphalt","Dirt"]}/></F></div>
           <F label="Internal Location" hint="Zone, block, space number"><Inp value={s.location||""} onChange={v=>u("location",v)} placeholder="Zone B, Block 3"/></F>
           <div className="grid grid-cols-2 gap-4"><F label="Access"><Sel value={s.access||"24/7"} onChange={v=>u("access",v)} options={[["24/7","24/7 Access"],["business","Business Hours"],["restricted","By Appointment"]]}/></F><F label="Tenant"><Inp value={s.tenant||""} onChange={v=>u("tenant",v)}/></F></div>
-          <F label="Photos" hint="Se muestran en el catálogo público"><PhotoSlots photos={s.photos} prefix={`space/${s.id||"new"}/photos`} onChange={v=>u("photos",v)}/></F>
+          <F label="Photos" hint="Shown in the public catalog"><PhotoSlots photos={s.photos} prefix={`space/${s.id||"new"}/photos`} onChange={v=>u("photos",v)}/></F>
         </div>}
         {tab==="pricing"&&<div className="space-y-5">
           <div className="grid grid-cols-3 gap-4"><F label="Daily"><Inp value={s.daily||""} onChange={v=>u("daily",Number(v))} type="number"/></F><F label="Weekly"><Inp value={s.weekly||""} onChange={v=>u("weekly",Number(v))} type="number"/></F><F label="Monthly *"><Inp value={s.monthly||""} onChange={v=>u("monthly",Number(v))} type="number"/></F></div>
@@ -453,7 +487,7 @@ function CategoryManager({categories,setCategories,fleet=[],onClose}){
               <input value={c.icon} onChange={e=>patch(c.name,"icon",e.target.value)} maxLength={4} className="w-10 text-center text-lg border border-stone-200 rounded"/>
               <div className="flex-1"><div className="text-sm font-medium">{c.name}</div><div className="text-[11px] text-stone-400">{n} unit{n===1?"":"s"}</div></div>
               <select value={c.group} onChange={e=>patch(c.name,"group",e.target.value)} className="text-xs border border-stone-200 rounded px-2 py-1">{groups.map(x=><option key={x} value={x}>{x}</option>)}</select>
-              <button onClick={()=>{if(n>0&&!window.confirm(`"${c.name}" lo usan ${n} unidad(es). ¿Quitarla de la lista igual? Esas unidades conservan su categoría pero ya no será seleccionable.`))return;del(c.name)}} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+              <button onClick={()=>{if(n>0&&!window.confirm(`"${c.name}" is used by ${n} unit(s). Remove it from the list anyway? Those units keep their category but it will no longer be selectable.`))return;del(c.name)}} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
             </div>})}
             {categories.filter(c=>c.group===g).length===0&&<div className="text-xs text-stone-400 italic">None</div>}
           </div>
@@ -1673,7 +1707,7 @@ function ContactsMod({contacts:propContacts,setContacts:propSetContacts,orders=[
   const addContact=()=>{
     if(!nc.name||!nc.email)return;
     const email=nc.email.trim().toLowerCase();
-    if(contacts.some(c=>(c.email||"").trim().toLowerCase()===email)){setAddErr("Ya existe un contacto con ese correo.");return;}
+    if(contacts.some(c=>(c.email||"").trim().toLowerCase()===email)){setAddErr("A contact with that email already exists.");return;}
     setAddErr("");
     setContacts(p=>[{...nc,email:nc.email.trim(),id:nid(),registered:new Date().toISOString().split("T")[0],lastOrder:"",totalSpent:0,orders:0,hasAccount:false},...p]);
     setNc({name:"",email:"",phone:"",city:"Laredo",company:"",idDoc:""});setAdding(false);
@@ -1690,7 +1724,7 @@ function ContactsMod({contacts:propContacts,setContacts:propSetContacts,orders=[
     /* Fija la contraseña REAL en Supabase Auth (Edge Function con service role) */
     if(isSupabaseConfigured&&supabase){
       const {data,error}=await supabase.functions.invoke("admin-user",{body:{action:"set_password",email:viewing.email,password:pwForm.newPw}});
-      if(error||data?.error){setPwErr((data&&data.error)||error.message||"No se pudo cambiar la contraseña");setPwBusy(false);return}
+      if(error||data?.error){setPwErr((data&&data.error)||error.message||"Could not change password");setPwBusy(false);return}
     }
     setContacts(p=>p.map(c=>c.id===viewing.id?{...c,hasAccount:true,passwordUpdatedAt:new Date().toISOString()}:c));
     setViewing(prev=>({...prev,hasAccount:true,passwordUpdatedAt:new Date().toISOString()}));
@@ -1868,7 +1902,7 @@ function ContactsMod({contacts:propContacts,setContacts:propSetContacts,orders=[
                   {pwErr&&<div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{pwErr}</div>}
                   <div className="flex gap-2 pt-2">
                     <button onClick={()=>{setPwOpen(false);setPwForm({newPw:"",confirmPw:""});setPwErr("")}} className="flex-1 px-3 py-2 border border-stone-200 rounded-lg text-xs font-semibold">Cancel</button>
-                    <button onClick={updatePassword} disabled={pwBusy||!pwForm.newPw||pwForm.newPw.length<8||pwForm.newPw!==pwForm.confirmPw} className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold disabled:opacity-40">{pwBusy?"Guardando…":`✓ ${viewing.hasAccount?"Update":"Set"} password`}</button>
+                    <button onClick={updatePassword} disabled={pwBusy||!pwForm.newPw||pwForm.newPw.length<8||pwForm.newPw!==pwForm.confirmPw} className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold disabled:opacity-40">{pwBusy?"Saving…":`✓ ${viewing.hasAccount?"Update":"Set"} password`}</button>
                   </div>
                   <p className="text-[10px] text-stone-400 italic">The password is applied to the client's account securely. Only requests for existing accounts succeed.</p>
                 </>}
@@ -2422,74 +2456,78 @@ function UsersMod({users,setUsers,roles,setRoles}){
   const sendInvite=async()=>{
     const email=invEmail.trim();
     if(!email)return;
-    if(!(isSupabaseConfigured&&supabase)){setInvErr("Invitaciones requieren Supabase configurado.");return;}
+    if(!(isSupabaseConfigured&&supabase)){setInvErr("Invitations require Supabase to be configured.");return;}
     setInvBusy(true);setInvErr("");setInvLink("");
     try{
       const role=(roles.find(r=>r.name===invRole)||{}).key||"sales";
       const name=email.split("@")[0];
       const token="INV"+Math.random().toString(36).slice(2,10).toUpperCase()+Date.now().toString(36).toUpperCase();
       const {error:ie}=await supabase.from("invites").upsert({token,email,name,role,status:"active",invited_by:"admin"},{onConflict:"token"});
-      if(ie){setInvErr(ie.message||"No se pudo crear la invitación");setInvBusy(false);return;}
+      if(ie){setInvErr(ie.message||"Could not create invitation");setInvBusy(false);return;}
       const link=`${location.origin}/?invite=${token}`;
       const res=await sendEmail("account-invite",email,{name,invite_url:link,role_label:invRole});
       setInvBusy(false);
       setUsers(p=>[...p.filter(x=>x.email!==email),{id:email,name,email,role:invRole,status:"invited",last:"—",initials:email.substring(0,2).toUpperCase()}]);
       if(res&&res.ok&&!res.skipped){setInvEmail("");setInviting(false);flash(`Invitación enviada a ${email}`);}
-      else{setInvLink(link);setInvErr(res&&res.skipped?"Los correos están OFF (Settings → Send transactional emails). Copia y comparte este enlace:":"El correo no se pudo enviar. Copia y comparte este enlace:");}
+      else{setInvLink(link);setInvErr(res&&res.skipped?"Emails are OFF (Settings → Send transactional emails). Copy and share this link:":"The email could not be sent. Copy and share this link:");}
     }catch(e){setInvErr(String(e?.message||e));setInvBusy(false);}
   };
   const [userMsg,setUserMsg]=useState("");
   const flash=(m)=>{setUserMsg(m);setTimeout(()=>setUserMsg(s=>s===m?"":s),3500);};
   const callAdmin=async(body)=>{
-    if(!(isSupabaseConfigured&&supabase))throw new Error("Requiere Supabase configurado.");
+    if(!(isSupabaseConfigured&&supabase))throw new Error("Requires Supabase to be configured.");
     const {data,error}=await supabase.functions.invoke("admin-user",{body});
-    if(error||data?.error)throw new Error((data&&data.error)||error.message||"Operación fallida");
+    if(error||data?.error)throw new Error((data&&data.error)||error.message||"Operation failed");
     return data;
   };
   /* u.role es la KEY del rol. El nombre para mostrar sale de la tabla roles. */
   const roleByKey=(k)=>roles.find(r=>r.key===k);
   const updateRole=async(u,key)=>{
     const prev=u.role;setUsers(p=>p.map(x=>x.id===u.id?{...x,role:key}:x));
-    try{await callAdmin({action:"role",email:u.email,role:key});flash(`Rol de ${u.email} → ${roleByKey(key)?.name||key}`);}
-    catch(e){setUsers(p=>p.map(x=>x.id===u.id?{...x,role:prev}:x));flash("No se pudo cambiar el rol: "+e.message);}
+    try{await callAdmin({action:"role",email:u.email,role:key});flash(`Role: ${u.email} → ${roleByKey(key)?.name||key}`);}
+    catch(e){setUsers(p=>p.map(x=>x.id===u.id?{...x,role:prev}:x));flash("Could not change role: "+e.message);}
   };
   const toggleStatus=async(u)=>{
     const next=u.status==="active"?"inactive":"active";
     setUsers(p=>p.map(x=>x.id===u.id?{...x,status:next}:x));
     try{await callAdmin({action:"status",email:u.email,active:next==="active"});flash(`${u.email} ${next==="active"?"reactivado":"desactivado"}`);}
-    catch(e){setUsers(p=>p.map(x=>x.id===u.id?{...x,status:u.status}:x));flash("No se pudo cambiar el estado: "+e.message);}
+    catch(e){setUsers(p=>p.map(x=>x.id===u.id?{...x,status:u.status}:x));flash("Could not change status: "+e.message);}
   };
-  /* Capacidad por sección (none/view/manage) → persiste en la tabla roles (la RLS la lee). */
+  /* Per-section capability (none/view/manage) → persisted to the roles table (RLS reads it).
+     Domain hermeticity: a role can only be granted capabilities within its base's domain. */
   const updateCap=async(r,section,level)=>{
+    if(!inDomain(r.base,section)){flash("That section is outside this role's domain");return;}
     const caps={...(r.capabilities||{}),[section]:level};
     setRoles(p=>p.map(x=>x.key===r.key?{...x,capabilities:caps}:x));
     const {error}=await upsertRole({key:r.key,name:r.name,base:r.base,capabilities:caps,is_system:!!r.is_system});
-    if(error)flash("No se pudo guardar el permiso");
+    if(error)flash("Could not save permission");
   };
-  /* El "panel/base" define la vista. Cambiarlo persiste y re-sincroniza el auth-role de sus usuarios. */
+  /* The "panel/base" defines the view. Changing it persists, strips any out-of-domain
+     capabilities (hermeticity) and re-syncs the auth-role of its users. */
   const updateBase=async(r,base)=>{
-    setRoles(p=>p.map(x=>x.key===r.key?{...x,base}:x));
-    await upsertRole({key:r.key,name:r.name,base,capabilities:r.capabilities||{},is_system:!!r.is_system});
+    const caps=Object.fromEntries(Object.entries(r.capabilities||{}).filter(([sec])=>inDomain(base,sec)));
+    setRoles(p=>p.map(x=>x.key===r.key?{...x,base,capabilities:caps}:x));
+    await upsertRole({key:r.key,name:r.name,base,capabilities:caps,is_system:!!r.is_system});
     const affected=users.filter(u=>u.role===r.key&&u.status!=="invited");
     for(const u of affected){try{await callAdmin({action:"role",email:u.email,role:r.key});}catch(e){}}
-    if(affected.length)flash(`Panel de "${r.name}" re-sincronizado en ${affected.length} usuario(s)`);
+    if(affected.length)flash(`Panel for "${r.name}" re-synced on ${affected.length} user(s)`);
   };
-  /* CRUD de roles en la tabla `roles`. */
+  /* CRUD for roles in the `roles` table. */
   const [newRole,setNewRole]=useState("");const [newBase,setNewBase]=useState("office");
   const slugify=(n)=>n.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,32);
   const addRole=async()=>{
     const n=newRole.trim();if(!n)return;
-    if(roles.some(r=>r.name.toLowerCase()===n.toLowerCase())){flash("Ya existe un rol con ese nombre");return;}
+    if(roles.some(r=>r.name.toLowerCase()===n.toLowerCase())){flash("A role with that name already exists");return;}
     let key=slugify(n)||("role_"+Date.now().toString(36));if(roles.some(r=>r.key===key))key=key+"_"+Date.now().toString(36).slice(-4);
     const role={key,name:n,base:newBase,capabilities:{},is_system:false};
-    const {error}=await upsertRole(role);if(error){flash("No se pudo crear el rol");return;}
-    setRoles(p=>[...p,role]);setNewRole("");flash(`Rol "${n}" creado (panel: ${newBase})`);
+    const {error}=await upsertRole(role);if(error){flash("Could not create role");return;}
+    setRoles(p=>[...p,role]);setNewRole("");flash(`Role "${n}" created (panel: ${newBase})`);
   };
   const deleteRole=async(r)=>{
-    if(r.is_system){flash("Los roles del sistema no se pueden eliminar");return;}
-    const inUse=users.filter(u=>u.role===r.key).length;if(inUse){flash(`No se puede eliminar: ${inUse} usuario(s) con este rol`);return;}
-    const {error}=await deleteRoleRow(r.key);if(error){flash("No se pudo eliminar");return;}
-    setRoles(p=>p.filter(x=>x.key!==r.key));flash(`Rol "${r.name}" eliminado`);
+    if(r.is_system){flash("System roles cannot be deleted");return;}
+    const inUse=users.filter(u=>u.role===r.key).length;if(inUse){flash(`Cannot delete: ${inUse} user(s) have this role`);return;}
+    const {error}=await deleteRoleRow(r.key);if(error){flash("Could not delete");return;}
+    setRoles(p=>p.filter(x=>x.key!==r.key));flash(`Role "${r.name}" deleted`);
   };
 
   return (
@@ -2522,8 +2560,8 @@ function UsersMod({users,setUsers,roles,setRoles}){
         <div className="space-y-4">
           <F label="Email Address *"><Inp value={invEmail} onChange={setInvEmail} type="email" placeholder="user@company.com"/></F>
           <F label="Assign Role *"><Sel value={invRole} onChange={setInvRole} options={roles.filter(r=>r.base!=="admin").map(r=>r.name)}/></F>
-          <div className="bg-stone-50 rounded-xl p-3 text-xs text-stone-600"><strong>Permisos de {invRole}:</strong><div className="mt-2 flex flex-wrap gap-2">{(()=>{const role=roles.find(r=>r.name===invRole);if(role?.base==="admin")return <span className="px-2 py-1 rounded bg-amber-100 text-amber-700">Control total</span>;const caps=role?.capabilities||{};const active=SECTIONS.filter(([k])=>caps[k]&&caps[k]!=="none");if(!active.length)return <span className="text-stone-400">Sin permisos asignados aún (configúralos en la pestaña Roles)</span>;return active.map(([k,l])=><span key={k} className={`px-2 py-1 rounded ${caps[k]==="manage"?"bg-emerald-100 text-emerald-700":"bg-blue-100 text-blue-700"}`}>{l}: {caps[k]==="manage"?"Manage":"View"}</span>)})()}</div></div>
-          <button onClick={sendInvite} disabled={invBusy||!invEmail} className="w-full px-5 py-2.5 bg-blue-900 text-white rounded-full text-sm hover:bg-blue-700 disabled:opacity-40 inline-flex items-center justify-center gap-2"><Mail className="w-4 h-4"/>{invBusy?"Enviando…":"Send Invitation"}</button>
+          <div className="bg-stone-50 rounded-xl p-3 text-xs text-stone-600"><strong>{invRole} permissions:</strong><div className="mt-2 flex flex-wrap gap-2">{(()=>{const role=roles.find(r=>r.name===invRole);if(role?.base==="admin")return <span className="px-2 py-1 rounded bg-amber-100 text-amber-700">Full control</span>;const caps=role?.capabilities||{};const active=SECTIONS.filter(([k])=>caps[k]&&caps[k]!=="none");if(!active.length)return <span className="text-stone-400">No permissions assigned yet (set them in the Roles tab)</span>;return active.map(([k,l])=><span key={k} className={`px-2 py-1 rounded ${caps[k]==="manage"?"bg-emerald-100 text-emerald-700":"bg-blue-100 text-blue-700"}`}>{l}: {caps[k]==="manage"?"Manage":"View"}</span>)})()}</div></div>
+          <button onClick={sendInvite} disabled={invBusy||!invEmail} className="w-full px-5 py-2.5 bg-blue-900 text-white rounded-full text-sm hover:bg-blue-700 disabled:opacity-40 inline-flex items-center justify-center gap-2"><Mail className="w-4 h-4"/>{invBusy?"Sending…":"Send Invitation"}</button>
           {invErr&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">{invErr}</div>}
           {invLink&&<div className="text-xs bg-stone-50 border border-stone-200 rounded-lg p-2.5 break-all font-mono select-all text-blue-700">{invLink}</div>}
         </div>
@@ -2540,12 +2578,12 @@ function UsersMod({users,setUsers,roles,setRoles}){
       ]})}/></SC>}
 
       {tab==="roles"&&<div className="space-y-4">
-        <div className="flex items-center gap-2 flex-wrap"><div className="w-full max-w-xs"><Inp value={newRole} onChange={setNewRole} placeholder="Nombre del nuevo rol (ej. Warehouse Lead)"/></div><select value={newBase} onChange={e=>setNewBase(e.target.value)} className="px-3 py-2 border border-stone-200 rounded-lg text-sm bg-white" title="Panel/vista que usará el rol">{ROLE_BASES.map(([v,l])=>(<option key={v} value={v}>{l}</option>))}</select><button onClick={addRole} disabled={!newRole.trim()} className="inline-flex items-center gap-2 bg-blue-900 text-white px-4 py-2 rounded-full text-sm hover:bg-blue-700 disabled:opacity-40"><Plus className="w-4 h-4"/>Crear rol</button></div>
-        <p className="text-xs text-stone-500 px-1">El <strong>panel</strong> define la vista base; las <strong>capacidades por sección</strong> definen qué puede ver/hacer (se aplican de verdad vía RLS). Los roles a medida usan el <strong>Panel admin recortado</strong> — solo verán las secciones que les permitas. El control total (<strong>Admin</strong>) queda reservado al Super Admin.</p>
-        <SC title="Permisos por rol (por sección)" padded={false}><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-stone-200"><th className="text-left px-4 py-3 text-[11px] font-medium text-stone-500 uppercase sticky left-0 bg-white z-10">Rol</th><th className="text-left px-3 py-3 text-[11px] font-medium text-stone-500 uppercase">Panel</th>{SECTIONS.map(([k,l])=>(<th key={k} className="px-2 py-3 text-[10px] font-medium text-stone-500 uppercase text-center whitespace-nowrap">{l}</th>))}<th className="px-3 py-3"></th></tr></thead>
-          <tbody>{roles.map(r=>{const isAdminRole=r.base==="admin";const inUse=users.filter(u=>u.role===r.key).length;const caps=r.capabilities||{};return (<tr key={r.key} className={`border-b border-stone-100 hover:bg-stone-50 ${isAdminRole?"bg-amber-50/30":""}`}><td className="px-4 py-3 font-medium whitespace-nowrap sticky left-0 bg-white">{r.name}{r.is_system&&<Lock className="w-3 h-3 inline ml-1 text-amber-500"/>}</td><td className="px-3 py-3">{r.is_system?<span className="text-xs font-semibold text-stone-600 whitespace-nowrap">{r.base==="admin"?"Admin":r.base==="sede"?"Fleet/HQ":"Sales"}</span>:<select value={r.base} onChange={e=>updateBase(r,e.target.value)} className="text-xs px-2 py-1 border border-stone-200 rounded-lg bg-white">{ROLE_BASES.map(([v,l])=>(<option key={v} value={v}>{l}</option>))}</select>}</td>{SECTIONS.map(([k])=>(<td key={k} className="px-2 py-3 text-center">{isAdminRole?<span className="text-[11px] font-semibold text-emerald-700">Manage</span>:<select value={capLevel(caps,k)} onChange={e=>updateCap(r,k,e.target.value)} className={`text-xs px-1 py-0.5 border border-stone-200 rounded ${capLevel(caps,k)==="manage"?"text-emerald-700 font-semibold":capLevel(caps,k)==="view"?"text-blue-700":"text-stone-400"}`}>{CAP_LEVELS.map(([v,l])=>(<option key={v} value={v}>{l}</option>))}</select>}</td>))}<td className="px-3 py-3 text-center">{r.is_system?<Lock className="w-3.5 h-3.5 text-stone-300 inline"/>:<button onClick={()=>deleteRole(r)} disabled={inUse>0} title={inUse>0?`${inUse} usuario(s) usan este rol`:"Eliminar rol"} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent"><Trash2 className="w-4 h-4"/></button>}</td></tr>);})}</tbody>
+        <div className="flex items-center gap-2 flex-wrap"><div className="w-full max-w-xs"><Inp value={newRole} onChange={setNewRole} placeholder="New role name (e.g. Warehouse Lead)"/></div><select value={newBase} onChange={e=>setNewBase(e.target.value)} className="px-3 py-2 border border-stone-200 rounded-lg text-sm bg-white" title="Panel/view the role will use">{ROLE_BASES.map(([v,l])=>(<option key={v} value={v}>{l}</option>))}</select><button onClick={addRole} disabled={!newRole.trim()} className="inline-flex items-center gap-2 bg-blue-900 text-white px-4 py-2 rounded-full text-sm hover:bg-blue-700 disabled:opacity-40"><Plus className="w-4 h-4"/>Create role</button></div>
+        <p className="text-xs text-stone-500 px-1">The <strong>panel</strong> defines the base view; the <strong>per-section capabilities</strong> define what each role can see/do (enforced for real via RLS). Each panel is <strong>domain-locked</strong>: a Sales role can only be granted Sales sections and a Fleet/HQ role only maintenance sections — out-of-domain cells are disabled. Full control (<strong>Admin</strong>) is reserved for the Super Admin.</p>
+        <SC title="Role permissions (by section)" padded={false}><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-stone-200"><th className="text-left px-4 py-3 text-[11px] font-medium text-stone-500 uppercase sticky left-0 bg-white z-10">Role</th><th className="text-left px-3 py-3 text-[11px] font-medium text-stone-500 uppercase">Panel</th>{SECTIONS.map(([k,l])=>(<th key={k} className="px-2 py-3 text-[10px] font-medium text-stone-500 uppercase text-center whitespace-nowrap">{l}</th>))}<th className="px-3 py-3"></th></tr></thead>
+          <tbody>{roles.map(r=>{const isAdminRole=r.base==="admin";const inUse=users.filter(u=>u.role===r.key).length;const caps=r.capabilities||{};return (<tr key={r.key} className={`border-b border-stone-100 hover:bg-stone-50 ${isAdminRole?"bg-amber-50/30":""}`}><td className="px-4 py-3 font-medium whitespace-nowrap sticky left-0 bg-white">{r.name}{r.is_system&&<Lock className="w-3 h-3 inline ml-1 text-amber-500"/>}</td><td className="px-3 py-3">{r.is_system?<span className="text-xs font-semibold text-stone-600 whitespace-nowrap">{r.base==="admin"?"Admin":r.base==="sede"?"Fleet/HQ":"Sales"}</span>:<select value={r.base} onChange={e=>updateBase(r,e.target.value)} className="text-xs px-2 py-1 border border-stone-200 rounded-lg bg-white">{ROLE_BASES.map(([v,l])=>(<option key={v} value={v}>{l}</option>))}</select>}</td>{SECTIONS.map(([k])=>(<td key={k} className="px-2 py-3 text-center">{isAdminRole?<span className="text-[11px] font-semibold text-emerald-700">Manage</span>:!inDomain(r.base,k)?<span className="text-[11px] text-stone-300" title="Outside this panel's domain">—</span>:<select value={capLevel(caps,k)} onChange={e=>updateCap(r,k,e.target.value)} className={`text-xs px-1 py-0.5 border border-stone-200 rounded ${capLevel(caps,k)==="manage"?"text-emerald-700 font-semibold":capLevel(caps,k)==="view"?"text-blue-700":"text-stone-400"}`}>{CAP_LEVELS.map(([v,l])=>(<option key={v} value={v}>{l}</option>))}</select>}</td>))}<td className="px-3 py-3 text-center">{r.is_system?<Lock className="w-3.5 h-3.5 text-stone-300 inline"/>:<button onClick={()=>deleteRole(r)} disabled={inUse>0} title={inUse>0?`${inUse} user(s) have this role`:"Delete role"} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent"><Trash2 className="w-4 h-4"/></button>}</td></tr>);})}</tbody>
         </table></div></SC>
-        <div className="text-xs text-stone-500 px-2"><strong>None</strong> = sin acceso (oculto) · <strong>View</strong> = solo lectura · <strong>Manage</strong> = crear/editar/eliminar. Se aplican de verdad (RLS), no solo en la interfaz.</div>
+        <div className="text-xs text-stone-500 px-2"><strong>None</strong> = no access (hidden) · <strong>View</strong> = read-only · <strong>Manage</strong> = create/edit/delete. Enforced for real (RLS), not just in the UI.</div>
       </div>}
     </div>
   );
@@ -3189,7 +3227,7 @@ async function downloadDoc(doc){
     if(doc.path){
       /* Documento en bucket privado: genera signed URL y ábrelo (RLS: dueño o staff) */
       const url=await signedUrl(doc.path);
-      if(!url){alert("No se pudo abrir el documento (permiso o expirado).");return;}
+      if(!url){alert("Could not open the document (permission denied or expired).");return;}
       a.href=url;a.target="_blank";a.rel="noreferrer";
     }else{
       /* Legacy: documento embebido como data URL */
@@ -3432,10 +3470,10 @@ function PaymentLinkButton({order,orders=[]}){
     const base=location.origin+location.pathname;
     const link=await createCheckoutSession({items:cartToStripeLineItems(group),orderRef:order.gid||order.oid,email:order.ue,successUrl:base+"?checkout=success",cancelUrl:base+"?checkout=cancel"});
     setLoading(false);
-    if(link)setUrl(link); else setErr("No se pudo generar el link. Verifica que Stripe esté activo y con la clave secreta cargada.");
+    if(link)setUrl(link); else setErr("Could not generate the link. Check that Stripe is active and the secret key is loaded.");
   };
   const copy=()=>{try{navigator.clipboard.writeText(url);setCopied(true);setTimeout(()=>setCopied(false),1800);}catch(e){}};
-  if(!stripeCfg?.enabled) return <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-500">💳 Activa Stripe (Configuración → Connected Services) para generar links de cobro con tarjeta.</div>;
+  if(!stripeCfg?.enabled) return <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-500">💳 Enable Stripe (Settings → Connected Services) to generate card payment links.</div>;
   return <div className="space-y-2">
     {!url&&<button onClick={gen} disabled={loading} className="w-full py-2.5 bg-blue-900 text-white rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-50">{loading?"Generando…":"💳 Generar link de cobro con tarjeta"}</button>}
     {err&&<div className="text-xs text-red-600">{err}</div>}
@@ -3449,7 +3487,7 @@ function PaymentLinkButton({order,orders=[]}){
         <a href={url} target="_blank" rel="noreferrer" className="flex-1 text-center py-2 border border-stone-200 rounded-lg text-xs font-semibold text-stone-700">Abrir</a>
         <button onClick={gen} className="flex-1 py-2 border border-stone-200 rounded-lg text-xs font-semibold text-stone-600">Regenerar</button>
       </div>
-      <p className="text-[11px] text-stone-400">Envíalo al cliente por WhatsApp o correo. Al pagar, la orden se confirma automáticamente.</p>
+      <p className="text-[11px] text-stone-400">Send it to the customer via WhatsApp or email. Once paid, the order is confirmed automatically.</p>
     </div>}
   </div>;
 }
@@ -3732,6 +3770,15 @@ const commissionAmount=(o,pol)=>{if(!o||!o.salesRep||o.status==="Cancelled")retu
 /* ═══ SALES PANEL (role: sales) — schedule reservations for contacts and track own commissions ═══ */
 function SalesPanel({user,sv,logout,t,contacts=[],setContacts,fleet=[],orders=[],fleetBookings=[],scheduleSale,commissionPolicy,sendMagicLink,startBooking,updateMyAccount}){
   const [tab,setTab]=useState("schedule");
+  /* Modular by capability — only Sales-domain tabs the role is allowed to see.
+     "My account" is always available (personal). Cross-domain sections never appear here. */
+  const caps=useMyCaps();
+  const salesTabs=[["schedule","New reservation"],["commissions","My commissions"],["account","My account"]]
+    .filter(([k])=> k==="account"
+      || (k==="schedule"&&(canView(caps,"bookings")||canView(caps,"carts")))
+      || (k==="commissions"&&canView(caps,"commissions")));
+  useEffect(()=>{ if(caps!==null&&!salesTabs.some(([k])=>k===tab)) setTab(salesTabs[salesTabs.length-1][0]); },[caps]);
+  const activeTab=salesTabs.some(([k])=>k===tab)?tab:null;
   const [pickContact,setPickContact]=useState("");
   const [nc,setNc]=useState({name:"",email:"",phone:"",company:""});
   const [addingC,setAddingC]=useState(false);
@@ -3765,9 +3812,9 @@ function SalesPanel({user,sv,logout,t,contacts=[],setContacts,fleet=[],orders=[]
         <div className="cd" style={{padding:16}}><div style={{fontSize:11,color:"var(--g5)",textTransform:"uppercase",fontWeight:600}}>Paid</div><div style={{fontSize:24,fontWeight:800,color:"var(--navy)"}}>{$f(myPaid)}</div></div>
         <div className="cd" style={{padding:16}}><div style={{fontSize:11,color:"var(--g5)",textTransform:"uppercase",fontWeight:600}}>Pending payment</div><div style={{fontSize:24,fontWeight:800,color:"var(--orange)"}}>{$f(myAccrued-myPaid)}</div></div>
       </div>
-      <div style={{display:"flex",gap:8,marginBottom:16}}>{[["schedule","New reservation"],["commissions","My commissions"],["account","My account"]].map(([k,l])=><button key={k} onClick={()=>setTab(k)} className="btn bsm" style={{background:tab===k?"var(--b6)":"#fff",color:tab===k?"#fff":"var(--g7)",border:tab===k?"none":"1px solid var(--g3)"}}>{l}</button>)}</div>
+      <div style={{display:"flex",gap:8,marginBottom:16}}>{salesTabs.map(([k,l])=><button key={k} onClick={()=>setTab(k)} className="btn bsm" style={{background:tab===k?"var(--b6)":"#fff",color:tab===k?"#fff":"var(--g7)",border:tab===k?"none":"1px solid var(--g3)"}}>{l}</button>)}</div>
 
-      {tab==="schedule"&&<div className="cd" style={{padding:24}}>
+      {activeTab==="schedule"&&<div className="cd" style={{padding:24}}>
         <h3 style={{fontWeight:800,fontSize:18,color:"var(--navy)",marginBottom:4}}>Schedule a reservation for a contact</h3>
         <p style={{fontSize:13,color:"var(--g5)",marginBottom:18}}>Pick who the booking is for, then use the full catalog — the same flow clients use — to add <strong>one or several</strong> vehicles and storage spaces with real availability, dates, mileage and deposits.</p>
 
@@ -3809,7 +3856,7 @@ function SalesPanel({user,sv,logout,t,contacts=[],setContacts,fleet=[],orders=[]
         </div>
       </div>}
 
-      {tab==="account"&&<div className="cd" style={{padding:24,maxWidth:720}}>
+      {activeTab==="account"&&<div className="cd" style={{padding:24,maxWidth:720}}>
         <h3 style={{fontWeight:800,fontSize:18,color:"var(--navy)",marginBottom:4}}>My account</h3>
         <p style={{fontSize:13,color:"var(--g5)",marginBottom:18}}>Keep your contact details current and change your own password. Your role and commission policy are managed by the admin.</p>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
@@ -3823,7 +3870,7 @@ function SalesPanel({user,sv,logout,t,contacts=[],setContacts,fleet=[],orders=[]
         </div>
       </div>}
 
-      {tab==="commissions"&&<div className="cd" style={{padding:0,overflow:"hidden"}}>
+      {activeTab==="commissions"&&<div className="cd" style={{padding:0,overflow:"hidden"}}>
         <div style={{padding:16,borderBottom:"1px solid var(--g2)",fontWeight:700,color:"var(--navy)"}}>My reservations & commissions ({myOrders.length}) {projected>0&&<span style={{fontSize:12,fontWeight:500,color:"var(--g5)"}}>· projected pending validation: {$f(projected)}</span>}</div>
         {myOrders.length===0?<div style={{padding:40,textAlign:"center",color:"var(--g5)"}}>No reservations yet. Schedule one to start earning commission.</div>
         :<div>{myOrders.slice().reverse().map(o=>{const comm=commissionAmount(o,commissionPolicy);const st=o.status==="Pending"?"Awaiting validation":o.status==="Cancelled"?"Rejected":o.commissionPaid?"Commission paid":"Earned (unpaid)";return <div key={o.oid} style={{padding:"12px 16px",borderBottom:"1px solid var(--g1)"}}>
@@ -3946,11 +3993,11 @@ function InvitePage({token,invite,onAccept,sv,user,onSignOutStay}){
     return <div className="fi" style={{minHeight:"80vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"linear-gradient(135deg,var(--b0),var(--g0))"}}>
       <div className="cd" style={{maxWidth:440,width:"100%",padding:40,textAlign:"center"}}>
         <div style={{width:60,height:60,borderRadius:16,background:"linear-gradient(135deg,var(--orange),#F97316)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><X n="lock" s={28} c="#fff"/></div>
-        <h2 style={{fontSize:22,fontWeight:800,color:"var(--navy)",marginBottom:8}}>Ya tienes una sesión activa</h2>
-        <p style={{color:"var(--g5)",fontSize:14,marginBottom:20}}>Estás conectado como <strong>{user.email}</strong>. Para aceptar esta invitación y crear la cuenta nueva, primero cierra la sesión actual.</p>
+        <h2 style={{fontSize:22,fontWeight:800,color:"var(--navy)",marginBottom:8}}>You already have an active session</h2>
+        <p style={{color:"var(--g5)",fontSize:14,marginBottom:20}}>You are signed in as <strong>{user.email}</strong>. To accept this invitation and create the new account, sign out of the current session first.</p>
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          <button onClick={()=>onSignOutStay&&onSignOutStay()} className="btn bp blg" style={{width:"100%",justifyContent:"center"}}>Cerrar sesión y continuar</button>
-          <button onClick={()=>sv("home")} className="btn bs" style={{width:"100%",justifyContent:"center"}}>Cancelar</button>
+          <button onClick={()=>onSignOutStay&&onSignOutStay()} className="btn bp blg" style={{width:"100%",justifyContent:"center"}}>Sign out and continue</button>
+          <button onClick={()=>sv("home")} className="btn bs" style={{width:"100%",justifyContent:"center"}}>Cancel</button>
         </div>
       </div>
     </div>;
@@ -4508,7 +4555,7 @@ export default function App(){
       }else if(event==="SIGNED_OUT"){
         const wasLoggedIn=!!userRef.current;
         setUser(null);
-        if(wasLoggedIn&&!loggingOutRef.current){setView("home");if(t)t("Tu sesión expiró. Inicia sesión de nuevo.","error");}
+        if(wasLoggedIn&&!loggingOutRef.current){setView("home");if(t)t("Your session expired. Please sign in again.","error");}
         loggingOutRef.current=false;
       }
     });
@@ -5526,10 +5573,10 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},cred
               <div className="ig"><label>Time of Transfer</label><input className="inf" type="time" value={payDetail.zelleTime} onChange={e=>upPay("zelleTime",e.target.value)}/></div>
             </div>
             <div className="ig"><label>Payment receipt (attachment) *</label>
-              <input type="file" accept="image/*,application/pdf" disabled={zProofBusy} onChange={async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;upPay("zelleProof",f.name);setZProofBusy(true);setZProofErr("");try{const m=await uploadMedia(f,"zelle/proof");upPay("zelleProofUrl",m.url);upPay("zelleProofPath",m.path);}catch(err){setZProofErr("No se pudo adjuntar. Envía el recibo a "+(company.email||SUPPORT.email));}finally{setZProofBusy(false);}}} style={{fontSize:13,padding:"8px 0"}}/>
-              {zProofBusy&&<div style={{fontSize:12,color:"var(--navy)",marginTop:4}}>Subiendo…</div>}
+              <input type="file" accept="image/*,application/pdf" disabled={zProofBusy} onChange={async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;upPay("zelleProof",f.name);setZProofBusy(true);setZProofErr("");try{const m=await uploadMedia(f,"zelle/proof");upPay("zelleProofUrl",m.url);upPay("zelleProofPath",m.path);}catch(err){setZProofErr("Could not attach. Send the receipt to "+(company.email||SUPPORT.email));}finally{setZProofBusy(false);}}} style={{fontSize:13,padding:"8px 0"}}/>
+              {zProofBusy&&<div style={{fontSize:12,color:"var(--navy)",marginTop:4}}>Uploading…</div>}
               {zProofErr&&<div style={{fontSize:12,color:"var(--red)",fontWeight:600,marginTop:4}}>{zProofErr}</div>}
-              {payDetail.zelleProof&&!zProofBusy&&<div style={{fontSize:12,color:"var(--green)",fontWeight:600,marginTop:4}}>📎 {payDetail.zelleProof}{payDetail.zelleProofUrl?" adjuntado ✓":" (pendiente)"}</div>}
+              {payDetail.zelleProof&&!zProofBusy&&<div style={{fontSize:12,color:"var(--green)",fontWeight:600,marginTop:4}}>📎 {payDetail.zelleProof}{payDetail.zelleProofUrl?" attached ✓":" (pending)"}</div>}
             </div>
             <label style={{display:"flex",alignItems:"flex-start",gap:12,padding:14,background:payDetail.zelleReceipt?"#D1FAE5":"#fff",borderRadius:10,border:payDetail.zelleReceipt?"2px solid var(--green)":"2px solid var(--g2)",cursor:"pointer"}}>
               <input type="checkbox" checked={payDetail.zelleReceipt} onChange={e=>upPay("zelleReceipt",e.target.checked)} style={{width:18,height:18,accentColor:"var(--green)",marginTop:2}}/>
@@ -6156,7 +6203,7 @@ function Cl({orders,sv,user,contacts=[],setContacts,logout,creditLine,orders_all
                 const m=await uploadPrivate(f,`docs/${k}`);
                 addClientDoc({...base,path:m.path});
                 t&&t("Document uploaded","success");
-              }catch(err){t&&t("No se pudo subir el documento. Intenta de nuevo.","error");}
+              }catch(err){t&&t("Could not upload the document. Please try again.","error");}
             };
             return <div key={k} style={{padding:20,background:"var(--g0)",borderRadius:14,border:"2px dashed var(--g2)"}}>
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
@@ -7149,6 +7196,13 @@ function HQMod({deliveries,setDeliveries,bookings,setBookings}){
 /* ═══ FIELD HQ PANEL (sede role) ═══ */
 function FieldHQ({fleet,spaces,deliveries,setDeliveries,bookings=[],setBookings,user,sv,logout}){
   const [tab,setTab]=useState("pending");
+  /* Modular by capability — only Maintenance-domain sections the role is allowed to see.
+     Deliveries tabs need the `deliveries` cap; the Maintenance tab needs the `fleet` cap.
+     No Sales/revenue data ever appears here. */
+  const caps=useMyCaps();
+  const canDeliv=canView(caps,"deliveries"), canDelivManage=canManage(caps,"deliveries");
+  const canFleet=canView(caps,"fleet"), canFleetManage=canManage(caps,"fleet");
+  const hqTabs=[...(canDeliv?[["pending","Pending"],["delivered","Active"],["returned","Returned"]]:[]),...(canFleet?[["maint","Maintenance"]]:[])];
   const [sel,setSel]=useState(null);
   const [itemType,setItemType]=useState("fleet");
   const [creating,setCreating]=useState(false);
@@ -7156,6 +7210,7 @@ function FieldHQ({fleet,spaces,deliveries,setDeliveries,bookings=[],setBookings,
   const [confirmEndMaint,setConfirmEndMaint]=useState(null);
   const [mf,setMf]=useState({vid:"",reason:"",startDate:new Date().toISOString().split("T")[0],endDate:"",mechanic:"",priority:"normal",notes:""});
   const uMf=(k,v)=>setMf(p=>({...p,[k]:v}));
+  useEffect(()=>{ if(caps!==null&&hqTabs.length&&!hqTabs.some(([k])=>k===tab)) setTab(hqTabs[0][0]); },[caps]);
 
   /* Maintenance helpers */
   const activeMaint=bookings.filter(b=>b.type==="maintenance");
@@ -7235,24 +7290,24 @@ function FieldHQ({fleet,spaces,deliveries,setDeliveries,bookings=[],setBookings,
       </div>
 
       <div style={{maxWidth:1200,margin:"0 auto",padding:24}}>
-        {/* STATS */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:24}}>
+        {/* STATS — delivery totals (only when the role can see deliveries) */}
+        {canDeliv&&<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:24}}>
           {[["Pending",pending.length,"#F59E0B","⏳"],["Delivered",delivered.length,"#3B82F6","🚛"],["Returned",returned.length,"#10b981","✅"],["Total",deliveries.length,"#6366F1","📋"]].map(([l,n,c,i])=>
             <div key={l} style={{background:"#fff",borderRadius:16,padding:20,border:"1px solid var(--g2)",display:"flex",alignItems:"center",gap:16}}>
               <div style={{width:48,height:48,borderRadius:14,background:c+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>{i}</div>
               <div><div style={{fontSize:24,fontWeight:800,color:"var(--navy)"}}>{n}</div><div style={{fontSize:12,color:"var(--g5)"}}>{l}</div></div>
             </div>
           )}
-        </div>
+        </div>}
 
         {/* TABS */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:12}}>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {[["pending","Pending"],["delivered","Active"],["returned","Returned"],["maint","Maintenance"]].map(([k,l])=>
+            {hqTabs.map(([k,l])=>
               <button key={k} onClick={()=>{setTab(k);setSel(null);setCreating(false);setMaintForm(false);setPage(1)}} style={{padding:"10px 20px",borderRadius:10,fontSize:14,fontWeight:tab===k?700:500,border:"none",cursor:"pointer",background:tab===k?(k==="maint"?"#DC2626":"var(--navy)"):"#fff",color:tab===k?"#fff":"var(--g7)",boxShadow:tab===k?"none":"0 1px 4px rgba(0,0,0,.06)"}}>{l} ({k==="maint"?activeMaint.length:(k==="pending"?pending:k==="delivered"?delivered:returned).length})</button>
             )}
           </div>
-          {tab==="maint"&&<div style={{display:"flex",gap:8}}>
+          {tab==="maint"&&canFleetManage&&<div style={{display:"flex",gap:8}}>
             <button onClick={()=>{setMaintForm(!maintForm);if(!maintForm)uMf("priority","normal")}} style={{padding:"10px 20px",background:maintForm?"var(--g2)":"#F59E0B",color:maintForm?"var(--g7)":"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>{maintForm?"✕ Cancel":"🔧 Request Maintenance"}</button>
             {!maintForm&&<button onClick={()=>{setMaintForm(true);uMf("priority","urgent")}} style={{padding:"10px 20px",background:"#DC2626",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>⚠️ Emergency Maintenance</button>}
           </div>}
@@ -7294,7 +7349,7 @@ function FieldHQ({fleet,spaces,deliveries,setDeliveries,bookings=[],setBookings,
         </div>}
 
         {/* MAINTENANCE TAB */}
-        {tab==="maint"&&<div>
+        {tab==="maint"&&canFleet&&<div>
           {/* MAINTENANCE FORM */}
           {maintForm&&<div style={{background:"#fff",borderRadius:16,border:"1px solid var(--g2)",marginBottom:24,overflow:"hidden"}}>
             <div style={{padding:"20px 24px",background:mf.priority==="urgent"?"linear-gradient(135deg,#991B1B,#DC2626)":"linear-gradient(135deg,#B45309,#F59E0B)",borderRadius:"16px 16px 0 0",color:"#fff"}}><h3 style={{fontWeight:700,fontSize:18,margin:0}}>{mf.priority==="urgent"?"⚠️ Emergency Maintenance Request":"🔧 Maintenance Request"}</h3><p style={{fontSize:13,color:"rgba(255,255,255,.85)",marginTop:4}}>This request will be submitted to admin for approval. The unit will not enter maintenance until approved.</p></div>
@@ -7354,7 +7409,7 @@ function FieldHQ({fleet,spaces,deliveries,setDeliveries,bookings=[],setBookings,
         </div>}
 
         {/* LIST + DETAIL (deliveries) */}
-        {tab!=="maint"&&(()=>{
+        {tab!=="maint"&&canDeliv&&(()=>{
           /* Filter pipeline */
           let fs=shown;
           if(flKind==="fleet")fs=fs.filter(isFleetDelivery);
@@ -7447,7 +7502,7 @@ function FieldHQ({fleet,spaces,deliveries,setDeliveries,bookings=[],setBookings,
                     <div className="ig"><label>Tires</label><select className="inf" value={sel.tireCondition||""} onChange={e=>uDel(sel.id,"tireCondition",e.target.value)}><option value="">—</option><option>New</option><option>Good</option><option>Fair</option><option>Worn</option></select></div>
                   </div>
                   <div className="ig" style={{marginTop:10}}><label>Notes</label><textarea className="inf" rows={2} value={sel.notesOut||""} onChange={e=>uDel(sel.id,"notesOut",e.target.value)} placeholder="Pre-delivery notes..." style={{resize:"vertical"}}/></div>
-                  {sel.status==="pending"&&<button onClick={()=>doDeliver(sel.id)} disabled={!sel.milesOut||!sel.fuelOut} style={{width:"100%",marginTop:12,padding:"12px 0",background:"var(--b6)",color:"#fff",border:"none",borderRadius:10,fontWeight:700,cursor:"pointer",opacity:sel.milesOut&&sel.fuelOut?1:.4}}>✓ Mark as Delivered</button>}
+                  {sel.status==="pending"&&canDelivManage&&<button onClick={()=>doDeliver(sel.id)} disabled={!sel.milesOut||!sel.fuelOut} style={{width:"100%",marginTop:12,padding:"12px 0",background:"var(--b6)",color:"#fff",border:"none",borderRadius:10,fontWeight:700,cursor:"pointer",opacity:sel.milesOut&&sel.fuelOut?1:.4}}>✓ Mark as Delivered</button>}
                   {sel.deliveredBy&&<div style={{marginTop:8,fontSize:12,color:"var(--g5)"}}>Delivered by: {sel.deliveredBy} · {sel.deliveredAt}</div>}
                 </div>
 
@@ -7469,7 +7524,7 @@ function FieldHQ({fleet,spaces,deliveries,setDeliveries,bookings=[],setBookings,
                   </div>
                   <div className="ig" style={{marginTop:10}}><label>Return Notes</label><textarea className="inf" rows={2} value={sel.notesIn||""} onChange={e=>uDel(sel.id,"notesIn",e.target.value)} placeholder="General condition, cleaning needed, fuel charge..." style={{resize:"vertical"}}/></div>
                   {sel.milesOut&&sel.milesIn&&<div style={{marginTop:8,padding:10,background:"var(--b0)",borderRadius:8,fontSize:13,fontWeight:600,color:"var(--b7)"}}>Miles driven: {Number(sel.milesIn)-Number(sel.milesOut)} mi</div>}
-                  {sel.status==="delivered"&&<button onClick={()=>doReturn(sel.id)} disabled={!sel.milesIn||!sel.fuelIn} style={{width:"100%",marginTop:12,padding:"12px 0",background:"#059669",color:"#fff",border:"none",borderRadius:10,fontWeight:700,cursor:"pointer",opacity:sel.milesIn&&sel.fuelIn?1:.4}}>✓ Mark as Returned</button>}
+                  {sel.status==="delivered"&&canDelivManage&&<button onClick={()=>doReturn(sel.id)} disabled={!sel.milesIn||!sel.fuelIn} style={{width:"100%",marginTop:12,padding:"12px 0",background:"#059669",color:"#fff",border:"none",borderRadius:10,fontWeight:700,cursor:"pointer",opacity:sel.milesIn&&sel.fuelIn?1:.4}}>✓ Mark as Returned</button>}
                   {sel.returnedBy&&<div style={{marginTop:8,fontSize:12,color:"var(--g5)"}}>Returned by: {sel.returnedBy} · {sel.returnedAt}</div>}
                 </div>}
 
