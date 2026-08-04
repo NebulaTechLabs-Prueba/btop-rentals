@@ -90,7 +90,7 @@ const admSeedRoles=[
 ];
 /* Bases ASIGNABLES a roles custom. "admin" (control total) queda reservado al Super Admin.
    "office" = panel admin recortado por capacidades (el default recomendado para roles a medida). */
-const ROLE_BASES=[["office","Panel admin (permisos a medida)"],["sede","Fleet / HQ panel"],["sales","Sales panel"]];
+const ROLE_BASES=[["office","Admin panel (custom permissions)"],["sede","Fleet / HQ panel"],["sales","Sales panel"]];
 /* Secciones sobre las que se definen capacidades (alineadas al panel admin). */
 const SECTIONS=[["fleet","Fleet"],["spaces","Spaces"],["contacts","Contacts"],["bookings","Bookings"],["payments","Payments"],["credit","Credit"],["invoices","Invoices"],["contracts","Contracts"],["commissions","Commissions"],["posts","Posts"],["messages","Messages"],["carts","Carts"],["deliveries","Deliveries"],["users","Users"],["settings","Settings"]];
 const CAP_LEVELS=[["none","None"],["view","View"],["manage","Manage"]];
