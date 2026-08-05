@@ -2738,12 +2738,15 @@ function DashMod({nav,fleet,spaces,orders=[],bookings=[],creditLines=[],contacts
 /* ═══ SETTINGS ═══ */
 function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEnabled,company,setCompany}){
   const [emailEnabled,setEmailEnabled]=useSetting("email_enabled",false);
-  const [stripeCfg,setStripeCfg]=useSetting("stripe_public",{enabled:false,mode:"test",pk_test:"",pk_live:""});
+  const [stripeCfg,setStripeCfg]=useSetting("stripe_public",{enabled:false,mode:"live",pk_live:""});
   const setStripe=(patch)=>setStripeCfg({...stripeCfg,...patch});
+  /* Live-only (PM decision — Test mode is not used). Force any legacy value to "live"
+     so the checkout function always resolves the live secret. */
+  useEffect(()=>{ if(stripeCfg&&stripeCfg.mode!=="live") setStripe({mode:"live"}); },[stripeCfg?.mode]);
   const [showKeys,setShowKeys]=useState(false);
   /* Secret & webhook keys: write-only. We can never read them back, so we track
      only a "set" marker (in the public stripe_public row) to show status. */
-  const [secretDraft,setSecretDraft]=useState({sk_test:"",sk_live:"",wh_test:"",wh_live:""});
+  const [secretDraft,setSecretDraft]=useState({sk_live:"",wh_live:""});
   const [secretFlash,setSecretFlash]=useState("");
   const saveSecret=async(field,key)=>{
     const val=(secretDraft[field]||"").trim(); if(!val||!supabase)return;
@@ -2845,7 +2848,6 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
         <div className="space-y-4">
           {/* STRIPE */}
           <div className="border border-stone-200 rounded-xl p-4"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">S</div><div><div className="text-sm font-semibold">Stripe</div><div className="text-xs text-stone-500">Credit card payments (hosted checkout)</div></div></div><div className="flex items-center gap-2"><Pill tone={stripeCfg.enabled?"emerald":"stone"}>{stripeCfg.enabled?`On · ${stripeCfg.mode==="live"?"Live":"Test"}`:"Off"}</Pill><button onClick={()=>setGwEdit(gwEdit==="stripe"?null:"stripe")} className="text-xs text-blue-700 font-medium px-3 py-1 hover:bg-blue-50 rounded-lg">Manage</button></div></div>
-            {stripeCfg.enabled&&stripeCfg.mode==="test"&&<div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3 h-3"/>Running in TEST mode — no real charges</div>}
             {gwEdit==="stripe"&&<div className="mt-4 space-y-4 border-t border-stone-200 pt-4">
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div className="max-w-md">
@@ -2859,26 +2861,20 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
               </div>
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-sm font-medium text-stone-700">Environment</span>
-                <div className="inline-flex bg-stone-100 rounded-full p-1">
-                  {[["test","Test"],["live","Live"]].map(([v,l])=><button key={v} onClick={()=>setStripe({mode:v})} className={`px-4 py-1.5 rounded-full text-xs font-semibold ${stripeCfg.mode===v?(v==="live"?"bg-blue-900 text-white":"bg-amber-500 text-white"):"text-stone-600"}`}>{l}</button>)}
-                </div>
-                <span className={`text-xs font-semibold px-2 py-1 rounded ${stripeCfg.mode==="live"?"bg-blue-50 text-blue-700":"bg-amber-50 text-amber-700"}`}>{stripeCfg.mode==="live"?"LIVE — real charges":"TEST — no real charges"}</span>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded bg-blue-50 text-blue-700">LIVE — real charges</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-stone-600">Publishable keys</span>
                 <button onClick={()=>setShowKeys(!showKeys)} className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-500 hover:text-stone-700">{showKeys?<EyeOff className="w-3.5 h-3.5"/>:<Eye className="w-3.5 h-3.5"/>}{showKeys?"Hide":"Show"}</button>
               </div>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <F label="Test (pk_test_…)"><Inp value={stripeCfg.pk_test} onChange={v=>setStripe({pk_test:v})} placeholder="pk_test_..." type={showKeys?"text":"password"}/></F>
+              <div className="grid gap-4">
                 <F label="Live (pk_live_…)"><Inp value={stripeCfg.pk_live} onChange={v=>setStripe({pk_live:v})} placeholder="pk_live_..." type={showKeys?"text":"password"}/></F>
               </div>
               <div className="space-y-4 border-t border-stone-100 pt-4">
                 <div className="flex items-center gap-2 text-xs font-medium text-stone-600">🔒 Private keys — stored securely on the server. For your protection they can be saved but never displayed again.</div>
                 <div className="grid sm:grid-cols-2 gap-x-4 gap-y-4">
                   {[
-                    {f:"sk_test",k:"stripe_sk_test",label:"Secret key — Test (sk_test_…)",ph:"sk_test_..."},
                     {f:"sk_live",k:"stripe_sk_live",label:"Secret key — Live (sk_live_…)",ph:"sk_live_..."},
-                    {f:"wh_test",k:"stripe_wh_test",label:"Webhook secret — Test (whsec_…)",ph:"whsec_..."},
                     {f:"wh_live",k:"stripe_wh_live",label:"Webhook secret — Live (whsec_…)",ph:"whsec_..."},
                   ].map(row=>(
                     <div key={row.f}>
@@ -3461,7 +3457,7 @@ function CartsMod({carts,setCarts,contacts=[]}){
 /* Generate a Stripe card payment link for an existing (Pending) order and share it
    with the customer. On payment, the webhook confirms the order by order_ref=gid. */
 function PaymentLinkButton({order,orders=[]}){
-  const [stripeCfg]=useSetting("stripe_public",{enabled:false,mode:"test"});
+  const [stripeCfg]=useSetting("stripe_public",{enabled:false,mode:"live"});
   const [loading,setLoading]=useState(false);
   const [url,setUrl]=useState("");
   const [copied,setCopied]=useState(false);
@@ -5377,7 +5373,7 @@ function CheckoutPage({cart,rmCart,cTotal,user,confirm,cancel,sv,company={},cred
   const [sigModal,setSigModal]=useState(false);
   const [agreeSign,setAgreeSign]=useState(false);
   /* Card checkout uses real Stripe only when the admin enabled it (settings.stripe_public) */
-  const [stripeCfg]=useSetting("stripe_public",{enabled:false,mode:"test",pk_test:"",pk_live:""});
+  const [stripeCfg]=useSetting("stripe_public",{enabled:false,mode:"live",pk_live:""});
   const stripeOn=!!stripeCfg?.enabled;
   /* Default to the client's default saved method (card/cash) so it opens first */
   const _defType=(savedPays.find(p=>p.isDefault)||savedPays[0]||{}).type;
