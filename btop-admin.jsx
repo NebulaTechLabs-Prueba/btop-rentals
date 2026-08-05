@@ -2931,7 +2931,9 @@ function ConfigMod({gateways,setGateways,hours,setHours,alarmEnabled,setAlarmEna
 
 /* ─── HELPERS ─── */
 const $ = n => "$"+Number(n).toLocaleString("en-US",{minimumFractionDigits:2});
-const dBetween = (a,b) => Math.max(1,Math.ceil((b-a)/864e5));
+/* Rental days are INCLUSIVE of both the pickup and return date:
+   Aug 1 → Aug 7 = 7 days (= 1 week), not 6. Math.round absorbs any DST drift. */
+const dBetween = (a,b) => Math.max(1,Math.round((b-a)/864e5)+1);
 const dStr = d => d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
 const same = (a,b) => a&&b&&a.toDateString()===b.toDateString();
 const inR = (d,s,e) => s&&e&&d>=s&&d<=e;
@@ -6621,7 +6623,7 @@ function StoragePage({sv,ac,setCartOpen,spaces:propSpaces,cart=[]}){
   const [bPhone,setBPhone]=useState("");
   const [bNotes,setBNotes]=useState("");
 
-  const bDays=bStart&&bEnd?Math.max(1,Math.ceil((bEnd-bStart)/864e5)):0;
+  const bDays=bStart&&bEnd?dBetween(bStart,bEnd):0;
   const bMonths=bDays>=28?Math.floor(bDays/28):0;
   const bRemDays=bDays-bMonths*28;
   const bTotal=bSpace?(bMonths*(bSpace.monthly||0))+(bRemDays*(bSpace.daily||bSpace.monthly/30||0)):0;
