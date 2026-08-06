@@ -4575,6 +4575,10 @@ html,body{overflow-x:hidden;max-width:100%}body{font-family:var(--f);background:
 .bd{display:inline-flex;align-items:center;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}.bb{background:var(--b1);color:var(--b7)}.bg{background:#D1FAE5;color:#065F46}
 .st{font-size:clamp(28px,4vw,42px);font-weight:800;color:var(--navy);line-height:1.15;letter-spacing:-.5px}.ss{font-size:17px;color:var(--g5);max-width:600px;line-height:1.6}
 @media(max-width:768px){.hm{display:none!important}.mf{grid-template-columns:1fr!important}
+  /* Hero: on mobile show the full image uncropped above the copy (navy fill), no background crop */
+  .hero{background:var(--navy)!important;min-height:auto!important;display:block!important;padding-top:0!important}
+  .hero-mimg{display:block!important}
+  .qbwrap{transform:none!important}
   input,select,textarea{font-size:16px!important}
   .blg{padding:14px 24px!important;font-size:15px!important}.btn{padding:11px 20px}
   .admin-sidebar{position:fixed!important;left:-270px;top:0;bottom:0;width:256px;z-index:120;transition:left .25s ease}
@@ -4835,7 +4839,9 @@ function Home({fleet,sv,ac,t,bookings=[],cart=[],orders=[],spaces:propSpaces,com
 
   return <div className="fi">
     {/* HERO */}
-    <section style={{position:"relative",minHeight:"80vh",display:"flex",alignItems:"center",overflow:"hidden",background:`linear-gradient(105deg,rgba(10,22,40,.95) 0%,rgba(11,37,69,.85) 35%,rgba(19,64,116,.4) 60%,rgba(19,64,116,.1) 80%,rgba(19,64,116,0) 100%), url(${HERO_IMG}) center/cover no-repeat`}}>
+    <section className="hero" style={{position:"relative",minHeight:"80vh",display:"flex",alignItems:"center",overflow:"hidden",background:`linear-gradient(105deg,rgba(10,22,40,.95) 0%,rgba(11,37,69,.85) 35%,rgba(19,64,116,.4) 60%,rgba(19,64,116,.1) 80%,rgba(19,64,116,0) 100%), url(${HERO_IMG}) center/cover no-repeat`}}>
+      {/* Mobile-only: full image shown uncropped above the text (desktop uses the background image) */}
+      <img src={HERO_IMG} alt="BTOP Rentals" className="hero-mimg" style={{display:"none",width:"100%",height:"auto"}}/>
       <div style={{position:"absolute",top:"-20%",right:"-10%",width:600,height:600,borderRadius:"50%",background:"radial-gradient(circle,rgba(37,99,235,.15),transparent 70%)"}}/>
       <div style={{position:"absolute",bottom:"-30%",left:"-15%",width:800,height:800,borderRadius:"50%",background:"radial-gradient(circle,rgba(59,130,246,.08),transparent 70%)"}}/>
       <div style={{maxWidth:1280,margin:"0 auto",padding:"0 24px",width:"100%",display:"grid",gridTemplateColumns:"1fr 1fr",gap:60,alignItems:"center",position:"relative",zIndex:2}} className="mf">
@@ -4861,7 +4867,7 @@ function Home({fleet,sv,ac,t,bookings=[],cart=[],orders=[],spaces:propSpaces,com
 
     {/* ═══ QUICK BOOK ═══ */}
     <section id="qb" style={{padding:"0 24px",background:"#fff",position:"relative",zIndex:10}}>
-      <div style={{maxWidth:1100,margin:"0 auto",transform:"translateY(-50px)"}}>
+      <div className="qbwrap" style={{maxWidth:1100,margin:"0 auto",transform:"translateY(-50px)"}}>
         <div style={{background:"#fff",borderRadius:20,boxShadow:"0 24px 60px rgba(11,37,69,.18)",overflow:"hidden"}}>
           <div style={{background:"linear-gradient(135deg,var(--b9),var(--b7))",padding:"24px 32px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
             <div><h2 style={{color:"#fff",fontWeight:800,fontSize:22}}>Quick Rental Booking</h2><p style={{color:"rgba(255,255,255,.55)",fontSize:14,marginTop:2}}>{bookType==="fleet"?"Vehicle":"Storage"} → {bookType==="fleet"?"Qty & Miles → ":""}Dates → Cart</p></div>
@@ -4870,9 +4876,9 @@ function Home({fleet,sv,ac,t,bookings=[],cart=[],orders=[],spaces:propSpaces,com
           <div style={{padding:32}}>
             {step===1&&<div className="fi">
               {/* TYPE TABS */}
-              <div style={{display:"flex",gap:8,marginBottom:20}}>
-                <button onClick={()=>{setBookType("fleet");setQu(null);setQSpace(null);setStep(1)}} style={{flex:1,padding:"14px 20px",borderRadius:12,border:bookType==="fleet"?"2px solid var(--b5)":"2px solid var(--g2)",background:bookType==="fleet"?"var(--b0)":"#fff",cursor:"pointer",display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:24}}>🚛</span><div style={{textAlign:"left"}}><div style={{fontWeight:700,fontSize:14,color:"var(--navy)"}}>Fleet Vehicles</div><div style={{fontSize:12,color:"var(--g5)"}}>Trucks, trailers, equipment</div></div></button>
-                <button onClick={()=>{setBookType("storage");setQu(null);setQSpace(null);setStep(1)}} style={{flex:1,padding:"14px 20px",borderRadius:12,border:bookType==="storage"?"2px solid var(--b5)":"2px solid var(--g2)",background:bookType==="storage"?"var(--b0)":"#fff",cursor:"pointer",display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:24}}>📦</span><div style={{textAlign:"left"}}><div style={{fontWeight:700,fontSize:14,color:"var(--navy)"}}>Storage Spaces</div><div style={{fontSize:12,color:"var(--g5)"}}>Yards, warehouses, cold storage</div></div></button>
+              <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
+                <button onClick={()=>{setBookType("fleet");setQu(null);setQSpace(null);setStep(1)}} style={{flex:"1 1 220px",minWidth:0,padding:"14px 20px",borderRadius:12,border:bookType==="fleet"?"2px solid var(--b5)":"2px solid var(--g2)",background:bookType==="fleet"?"var(--b0)":"#fff",cursor:"pointer",display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:24,flexShrink:0}}>🚛</span><div style={{textAlign:"left",minWidth:0}}><div style={{fontWeight:700,fontSize:14,color:"var(--navy)"}}>Fleet Vehicles</div><div style={{fontSize:12,color:"var(--g5)"}}>Trucks, trailers, equipment</div></div></button>
+                <button onClick={()=>{setBookType("storage");setQu(null);setQSpace(null);setStep(1)}} style={{flex:"1 1 220px",minWidth:0,padding:"14px 20px",borderRadius:12,border:bookType==="storage"?"2px solid var(--b5)":"2px solid var(--g2)",background:bookType==="storage"?"var(--b0)":"#fff",cursor:"pointer",display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:24,flexShrink:0}}>📦</span><div style={{textAlign:"left",minWidth:0}}><div style={{fontWeight:700,fontSize:14,color:"var(--navy)"}}>Storage Spaces</div><div style={{fontSize:12,color:"var(--g5)"}}>Yards, warehouses, cold storage</div></div></button>
               </div>
               {/* FLEET OPTIONS */}
               {bookType==="fleet"&&<><h3 style={{fontWeight:700,fontSize:16,color:"var(--navy)",marginBottom:16}}>Select a Vehicle</h3>
